@@ -1,3 +1,5 @@
+pub mod channel;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::pin::Pin;
