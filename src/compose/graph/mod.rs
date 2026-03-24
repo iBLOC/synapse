@@ -3,6 +3,9 @@ pub mod options;
 pub mod workflow;
 pub mod chain;
 
+#[cfg(test)]
+mod tests;
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use crate::runnable::{Runnable, RunnableFuture, RunnableResult, RunnableError, Context, StreamReader};
@@ -16,12 +19,16 @@ pub use options::{NodeTriggerMode, GraphCompileOptions, GraphCompileOption, With
 pub struct GraphNode {
     pub key: String,
     pub name: String,
-    pub runnable: Arc<dyn Runnable<serde_json::Value, serde_json::Value>>,
+    pub runnable: Option<Arc<dyn Runnable<serde_json::Value, serde_json::Value>>>,
 }
 
 impl GraphNode {
     pub fn new(key: String, runnable: Arc<dyn Runnable<serde_json::Value, serde_json::Value>>) -> Self {
-        Self { name: runnable.name(), key, runnable }
+        Self { name: runnable.name(), key, runnable: Some(runnable) }
+    }
+
+    fn new_sentinel(key: String) -> Self {
+        Self { name: key.clone(), key, runnable: None }
     }
 }
 
@@ -101,9 +108,16 @@ impl<I, O> Graph<I, O> {
         if self.compiled {
             return Err(RunnableError::GraphCompiled);
         }
+        let mut nodes = self.nodes;
+        nodes.entry(START.to_string()).or_insert_with(|| {
+            GraphNode::new_sentinel(START.to_string())
+        });
+        nodes.entry(END.to_string()).or_insert_with(|| {
+            GraphNode::new_sentinel(END.to_string())
+        });
         Ok(CompiledGraph {
             inner: Arc::new(CompiledGraphInner {
-                nodes: self.nodes,
+                nodes,
                 control_edges: self.control_edges,
                 data_edges: self.data_edges,
                 branches: self.branches,
@@ -179,12 +193,19 @@ async fn execute_graph(
 
         let ready = find_ready_nodes(inner, channel);
 
-        if ready.is_empty() && channel.done_nodes().contains(&END.to_string()) {
-            break;
-        }
-
         if ready.is_empty() {
-            break;
+            let end_deps: Vec<String> = inner.control_edges.iter()
+                .filter(|(_, targets)| targets.iter().any(|t| t == END))
+                .map(|(k, _)| k.clone())
+                .collect();
+            let is_end_done = channel.done_nodes().contains(&END.to_string());
+            let is_end_ready = !is_end_done && (end_deps.is_empty() || end_deps.iter().all(|d| channel.done_nodes().contains(d)));
+            if is_end_ready {
+                execute_node(inner, ctx, channel, END).await?;
+            }
+            if is_end_done || (is_end_ready && ready.is_empty()) {
+                break;
+            }
         }
 
         let handles: Vec<_> = ready.into_iter().map(|key| {
@@ -209,6 +230,9 @@ fn find_ready_nodes(inner: &CompiledGraphInner, channel: &Arc<dyn channel::Chann
     let mut ready = Vec::new();
 
     for (key, _) in &inner.nodes {
+        if key == END {
+            continue;
+        }
         if channel.done_nodes().contains(key) {
             continue;
         }
@@ -218,12 +242,16 @@ fn find_ready_nodes(inner: &CompiledGraphInner, channel: &Arc<dyn channel::Chann
             .map(|(k, _)| k.clone())
             .collect();
 
-        let is_ready = match inner.run_type {
-            NodeTriggerMode::AllPredecessor => {
-                deps.is_empty() || channel.all_predecessors_done(key, &deps)
-            }
-            NodeTriggerMode::AnyPredecessor => {
-                deps.is_empty() || deps.iter().any(|d| channel.done_nodes().contains(d))
+        let is_ready = if key == START {
+            true
+        } else {
+            match inner.run_type {
+                NodeTriggerMode::AllPredecessor => {
+                    deps.is_empty() || channel.all_predecessors_done(key, &deps)
+                }
+                NodeTriggerMode::AnyPredecessor => {
+                    deps.is_empty() || deps.iter().any(|d| channel.done_nodes().contains(d))
+                }
             }
         };
 
@@ -241,8 +269,38 @@ async fn execute_node(
     channel: &Arc<dyn channel::Channel>,
     key: &str,
 ) -> RunnableResult<()> {
-    let node = inner.nodes.get(key)
-        .ok_or_else(|| RunnableError::Invoke(format!("node {} not found", key)))?;
+    let node = match inner.nodes.get(key) {
+        Some(n) => n,
+        None => return Ok(()),
+    };
+
+    if key == START {
+        channel.mark_done(START)
+            .map_err(|e| RunnableError::Invoke(e))?;
+        return Ok(());
+    }
+
+    if key == END {
+        let preds: Vec<String> = inner.control_edges.iter()
+            .filter(|(_, targets)| targets.iter().any(|t| t == END))
+            .map(|(k, _)| k.clone())
+            .collect();
+        if let Some(last) = preds.last() {
+            let output = channel.get(last)
+                .map_err(|e| RunnableError::Invoke(e))?
+                .unwrap_or(serde_json::Value::Null);
+            channel.report(END, output)
+                .map_err(|e| RunnableError::Invoke(e))?;
+        }
+        channel.mark_done(END)
+            .map_err(|e| RunnableError::Invoke(e))?;
+        return Ok(());
+    }
+
+    let runnable = match &node.runnable {
+        Some(r) => r,
+        None => return Ok(()),
+    };
 
     let source_keys: Vec<String> = inner.data_edges.iter()
         .filter(|(_, targets)| targets.iter().any(|k| k == key))
@@ -254,12 +312,7 @@ async fn execute_node(
         .map_err(|e| RunnableError::Invoke(e))?
         .unwrap_or(serde_json::Value::Null);
 
-    let output = node.runnable.invoke(ctx.clone(), input).await?;
-
-    channel.report(key, serde_json::to_value(&output).map_err(|e| RunnableError::Invoke(e.to_string()))?)
-        .map_err(|e| RunnableError::Invoke(e))?;
-    channel.mark_done(key)
-        .map_err(|e| RunnableError::Invoke(e))?;
+    let output = runnable.invoke(ctx.clone(), input).await?;
 
     if let Some(branches) = inner.branches.get(key) {
         for branch in branches {
@@ -269,13 +322,18 @@ async fn execute_node(
                         if edge == &target {
                             continue;
                         }
-                            channel.report(edge, serde_json::Value::Null)
-                                .map_err(|e| RunnableError::Invoke(e))?;
+                        channel.report(edge, serde_json::Value::Null)
+                            .map_err(|e| RunnableError::Invoke(e))?;
                     }
                 }
             }
         }
     }
+
+    channel.report(key, output)
+        .map_err(|e| RunnableError::Invoke(e))?;
+    channel.mark_done(key)
+        .map_err(|e| RunnableError::Invoke(e))?;
 
     Ok(())
 }

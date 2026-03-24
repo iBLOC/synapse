@@ -28,10 +28,17 @@ impl DagChannel {
     }
 
     pub fn with_dependencies(deps: HashMap<String, Vec<String>>) -> Self {
-        let pending: HashMap<String, HashSet<String>> = deps
-            .into_iter()
-            .map(|(k, v)| (k, v.into_iter().collect()))
-            .collect();
+        let mut pending: HashMap<String, HashSet<String>> = HashMap::new();
+        for (_, targets) in &deps {
+            for target in targets {
+                pending.entry(target.clone()).or_default();
+            }
+        }
+        for (source, targets) in deps {
+            for target in targets {
+                pending.get_mut(&target).unwrap().insert(source.clone());
+            }
+        }
         Self {
             data: RwLock::new(HashMap::new()),
             done: RwLock::new(HashSet::new()),
@@ -58,10 +65,6 @@ impl Channel for DagChannel {
 
     fn mark_done(&self, node_key: &str) -> Result<(), String> {
         self.done.write().insert(node_key.to_string());
-        let mut pending = self.pending.write();
-        for deps in pending.values_mut() {
-            deps.remove(node_key);
-        }
         Ok(())
     }
 
@@ -69,12 +72,12 @@ impl Channel for DagChannel {
         self.done.read().iter().cloned().collect()
     }
 
-    fn all_predecessors_done(&self, node_key: &str, _deps: &[String]) -> bool {
-        self.pending
-            .read()
-            .get(node_key)
-            .map(|p| p.is_empty())
-            .unwrap_or(true)
+    fn all_predecessors_done(&self, node_key: &str, deps: &[String]) -> bool {
+        let pending = self.pending.read();
+        match pending.get(node_key) {
+            Some(waiting) => deps.iter().all(|d| self.done.read().contains(d)),
+            None => true,
+        }
     }
 
     fn any_predecessor_done(&self, _node_key: &str, _deps: &[String]) -> bool {
