@@ -1,11 +1,10 @@
-use async_trait::async_trait;
 use std::pin::Pin;
 use std::sync::Arc;
-use super::{Runnable, RunnableResult, RunnableError, Context};
+use super::{Runnable, RunnableFuture, RunnableResult, RunnableError, Context};
 
 pub struct Lambda {
     name: String,
-    invoke_fn: Option<Box<dyn Send + Sync + Fn(Context, serde_json::Value) -> Pin<Box<dyn std::future::Future<Output = RunnableResult<serde_json::Value>> + Send>>>>,
+    invoke_fn: Option<Box<dyn Send + Sync + Fn(Context, serde_json::Value) -> RunnableFuture<serde_json::Value>>>,
 }
 
 impl Lambda {
@@ -27,12 +26,13 @@ impl std::fmt::Debug for Lambda {
     }
 }
 
-#[async_trait]
 impl Runnable<serde_json::Value, serde_json::Value> for Lambda {
-    async fn invoke(&self, ctx: Context, input: serde_json::Value) -> RunnableResult<serde_json::Value> {
+    fn invoke(&self, ctx: Context, input: serde_json::Value) -> RunnableFuture<serde_json::Value> {
         match &self.invoke_fn {
-            Some(f) => f(ctx, input).await,
-            None => Err(RunnableError::NotImplemented("invoke not implemented".into())),
+            Some(f) => f(ctx, input),
+            None => Box::pin(async move {
+                Err(RunnableError::NotImplemented("invoke not implemented".into()))
+            }),
         }
     }
 

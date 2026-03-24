@@ -176,8 +176,8 @@ impl Channel for PregelChannel {
         false
     }
 
-    fn any_predecessor_done(&self, node_key: &str, _deps: &[String]) -> bool {
-        self.done.read().contains(node_key)
+    fn any_predecessor_done(&self, node_key: &str, deps: &[String]) -> bool {
+        deps.iter().any(|dep| self.done.read().contains(dep)) || self.done.read().contains(node_key)
     }
 
     fn pending_predecessors(&self, node_key: &str, _deps: &[String]) -> Vec<String> {
