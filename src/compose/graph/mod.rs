@@ -1,5 +1,7 @@
 pub mod channel;
 pub mod options;
+pub mod workflow;
+pub mod chain;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -324,3 +326,6 @@ where F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Syn
 pub fn new_graph<I, O>() -> Graph<I, O> {
     Graph::new(NodeTriggerMode::default())
 }
+
+pub use workflow::Workflow;
+pub use chain::Chain;

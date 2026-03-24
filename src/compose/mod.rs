@@ -6,3 +6,4 @@ pub mod checkpoint;
 pub mod state;
 
 pub use runnable::{Runnable, RunnableError, RunnableResult, StreamReader, StreamWriter, Context, channel};
+pub use graph::{Graph, CompiledGraph, Workflow, Chain, NodeTriggerMode, START, END};
