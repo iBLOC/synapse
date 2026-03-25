@@ -1,10 +1,10 @@
-pub use crate::callbacks::{CallbackHandler, CallbackManager, ComponentType, RunInfo, RunType};
+pub use crate::callbacks::{CallbackManager, ComponentType, Handler, RunInfo, RunType};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Context {
-    callbacks: Arc<Vec<Arc<dyn CallbackHandler>>>,
+    callbacks: Option<CallbackManager>,
     values: Arc<HashMap<String, serde_json::Value>>,
     checkpoint_id: Option<String>,
 }
@@ -18,23 +18,14 @@ impl Default for Context {
 impl Context {
     pub fn new() -> Self {
         Self {
-            callbacks: Arc::new(Vec::new()),
+            callbacks: None,
             values: Arc::new(HashMap::new()),
             checkpoint_id: None,
         }
     }
 
-    pub fn with_callbacks(mut self, cbs: Vec<Arc<dyn CallbackHandler>>) -> Self {
-        self.callbacks = Arc::new(cbs);
-        self
-    }
-
-    pub fn with_callback_manager(mut self, mgr: &CallbackManager) -> Self {
-        let mut cbs: Vec<Arc<dyn CallbackHandler>> = mgr.handlers().to_vec();
-        for h in self.callbacks.iter() {
-            cbs.push(h.clone());
-        }
-        self.callbacks = Arc::new(cbs);
+    pub fn with_callback_manager(mut self, mgr: CallbackManager) -> Self {
+        self.callbacks = Some(mgr);
         self
     }
 
@@ -54,8 +45,8 @@ impl Context {
         self.values.get(key).cloned()
     }
 
-    pub fn callbacks(&self) -> Arc<Vec<Arc<dyn CallbackHandler>>> {
-        self.callbacks.clone()
+    pub fn callbacks(&self) -> Option<&CallbackManager> {
+        self.callbacks.as_ref()
     }
 
     pub fn checkpoint_id(&self) -> Option<&str> {
@@ -72,7 +63,7 @@ mod tests {
     use super::*;
 
     struct NoopHandler;
-    impl CallbackHandler for NoopHandler {}
+    impl Handler for NoopHandler {}
 
     #[test]
     fn test_context_with_values() {
@@ -85,9 +76,10 @@ mod tests {
 
     #[test]
     fn test_context_callbacks() {
-        let handler: Arc<dyn CallbackHandler> = Arc::new(NoopHandler);
-        let ctx = Context::new().with_callbacks(vec![handler]);
-        assert_eq!(ctx.callbacks().len(), 1);
+        let handler: Arc<dyn Handler> = Arc::new(NoopHandler);
+        let manager = CallbackManager::new().with_handler(handler);
+        let ctx = Context::new().with_callback_manager(manager);
+        assert!(ctx.callbacks().is_some());
     }
 
     #[test]

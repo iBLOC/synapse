@@ -4,7 +4,7 @@ pub mod error;
 pub mod lambda;
 
 pub use stream::{StreamReader, StreamWriter, channel, pipe, from_array, merge, StreamError};
-pub use context::{Context, CallbackHandler, RunInfo};
+pub use context::{Context, Handler, RunInfo};
 pub use error::{RunnableError, RunnableResult};
 pub use lambda::{Lambda, invokable_lambda};
 
