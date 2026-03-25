@@ -3,3 +3,6 @@ pub mod runner;
 pub mod state;
 pub mod react;
 pub mod deep;
+
+pub use agent::{Agent, AgentInput, AgentEvent, AgentError, AgentOutput};
+pub use agent::react::{GraphReActAgent, GraphReActAgentBuilder};

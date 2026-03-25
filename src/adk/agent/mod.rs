@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use crate::schema::Message;
 
+pub mod react;
+
 pub type AgentResult<T> = Result<T, AgentError>;
 
 #[derive(Debug, thiserror::Error)]
