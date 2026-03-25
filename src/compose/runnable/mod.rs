@@ -1,17 +1,17 @@
+pub mod stream;
+pub mod context;
+pub mod error;
+pub mod lambda;
+
+#[cfg(test)]
+pub mod tests;
+
+pub use stream::{StreamReader, StreamWriter, channel, pipe, from_array, merge};
+pub use context::Context;
+pub use error::{RunnableError, RunnableResult};
+
 use async_trait::async_trait;
 use std::sync::Arc;
-
-pub type RunnableResult<T> = Result<T, RunnableError>;
-
-#[derive(Debug, thiserror::Error)]
-pub enum RunnableError {
-    #[error("invoke error: {0}")]
-    Invoke(String),
-    #[error("stream error: {0}")]
-    Stream(String),
-    #[error("batch error: {0}")]
-    Batch(String),
-}
 
 #[async_trait]
 pub trait Runnable<I, O>: Send + Sync {
