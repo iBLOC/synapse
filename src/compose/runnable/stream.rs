@@ -39,6 +39,7 @@ impl<T: Clone + Send + 'static> StreamReader<T> {
 }
 
 /// Async stream writer for compose module.
+#[derive(Clone)]
 pub struct StreamWriter<T> {
     tx: mpsc::Sender<Result<T, StreamError>>,
     _phantom: PhantomData<T>,
