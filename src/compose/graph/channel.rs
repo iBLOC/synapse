@@ -1,5 +1,5 @@
-use std::collections::{HashMap, HashSet};
 use parking_lot::RwLock;
+use std::collections::{HashMap, HashSet};
 
 /// Channel trait — 节点间数据传递的核心抽象
 pub trait Channel: Send + Sync {
@@ -31,8 +31,8 @@ impl DagChannel {
 
     pub fn with_dependencies(deps: HashMap<String, Vec<String>>) -> Self {
         let pending: HashMap<String, HashSet<String>> = deps
-            .iter()
-            .map(|(k, v)| (k.clone(), v.iter().cloned().collect()))
+            .into_iter()
+            .map(|(k, v)| (k, v.into_iter().collect()))
             .collect();
         Self {
             data: RwLock::new(HashMap::new()),
@@ -110,11 +110,13 @@ impl PregelChannel {
         }
     }
 
-    pub fn with_dependencies(deps: HashMap<String, Vec<String>>) -> Self {
-        let waiting: HashMap<String, HashSet<String>> = deps
-            .iter()
-            .map(|(k, v)| (k.clone(), v.iter().cloned().collect()))
-            .collect();
+    pub fn with_dependencies(edges: HashMap<String, Vec<String>>) -> Self {
+        let mut waiting: HashMap<String, HashSet<String>> = HashMap::new();
+        for (src, targets) in edges {
+            for tgt in targets {
+                waiting.entry(tgt).or_default().insert(src.clone());
+            }
+        }
         Self {
             data: RwLock::new(HashMap::new()),
             done: RwLock::new(HashSet::new()),
@@ -144,7 +146,7 @@ impl Channel for PregelChannel {
 
     fn mark_done(&self, node_key: &str) -> Result<(), String> {
         self.done.write().insert(node_key.to_string());
-        
+
         // Collect dependent keys first to avoid borrow issues
         let dependent_keys: Vec<String> = {
             let waiting = self.waiting.read();
@@ -156,7 +158,7 @@ impl Channel for PregelChannel {
                 .cloned()
                 .collect()
         };
-        
+
         // Remove from waiting sets
         let mut waiting = self.waiting.write();
         for key in dependent_keys {
@@ -236,7 +238,10 @@ mod tests {
         channel.mark_done("node1").unwrap();
 
         assert!(channel.done_nodes().contains(&"node1".to_string()));
-        assert_eq!(channel.get("node1").unwrap(), Some(serde_json::json!("test")));
+        assert_eq!(
+            channel.get("node1").unwrap(),
+            Some(serde_json::json!("test"))
+        );
 
         let mut deps = HashMap::new();
         deps.insert("node2".to_string(), vec!["node1".to_string()]);
@@ -246,7 +251,9 @@ mod tests {
         assert!(pending.contains(&"node1".to_string()));
 
         channel2.mark_done("node1").unwrap();
-        assert!(channel2.pending_predecessors("node2", &["node1".to_string()]).is_empty());
+        assert!(channel2
+            .pending_predecessors("node2", &["node1".to_string()])
+            .is_empty());
     }
 
     #[test]

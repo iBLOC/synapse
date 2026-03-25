@@ -157,10 +157,26 @@ impl<I: Send + 'static + serde::Serialize, O: Send + 'static + serde::de::Deseri
         let input_json = serde_json::to_value(&input)
             .map_err(|e| RunnableError::InvalidInput(e.to_string()))?;
 
-        let deps: HashMap<String, Vec<String>> = self.inner.control_edges.clone();
+        let control_edges = self.inner.control_edges.clone();
         let channel: Arc<dyn channel::Channel> = match self.inner.run_type {
-            NodeTriggerMode::AllPredecessor => Arc::new(channel::DagChannel::with_dependencies(deps)),
-            NodeTriggerMode::AnyPredecessor => Arc::new(channel::PregelChannel::with_dependencies(deps)),
+            NodeTriggerMode::AllPredecessor => {
+                let mut inverted: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+                for (src, targets) in &control_edges {
+                    for tgt in targets {
+                        inverted.entry(tgt.clone()).or_default().push(src.clone());
+                    }
+                }
+                Arc::new(channel::DagChannel::with_dependencies(inverted))
+            }
+            NodeTriggerMode::AnyPredecessor => {
+                let mut inverted: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+                for (src, targets) in &control_edges {
+                    for tgt in targets {
+                        inverted.entry(tgt.clone()).or_default().push(src.clone());
+                    }
+                }
+                Arc::new(channel::PregelChannel::with_dependencies(inverted))
+            }
         };
 
         channel.report(START, input_json)
