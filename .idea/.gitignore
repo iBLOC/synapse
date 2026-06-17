@@ -8,3 +8,9 @@
 /dataSources.local.xml
 # 基于编辑器的 HTTP 客户端请求
 /httpRequests/
+
+# Auto-generated AI workspace settings (not source code)
+/MarsCodeWorkspaceAppSettings.xml
+# JetBrains module file (IDE-specific)
+/*.iml
+
