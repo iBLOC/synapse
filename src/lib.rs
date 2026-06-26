@@ -2,6 +2,7 @@ pub mod schema;
 pub mod components;
 pub mod adk;
 pub mod compose;
+pub mod transport;
 pub mod callbacks;
 pub mod skills;
 pub mod a2a;
