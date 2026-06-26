@@ -20,7 +20,11 @@ pub struct Document {
 
 #[async_trait]
 pub trait Retriever: Send + Sync {
-    async fn retrieve(&self, query: &str, options: RetrieveOptions) -> RetrieverResult<Vec<Document>>;
+    async fn retrieve(
+        &self,
+        query: &str,
+        options: RetrieveOptions,
+    ) -> RetrieverResult<Vec<Document>>;
 }
 
 pub struct RetrieveOptions {

@@ -1,5 +1,8 @@
 pub mod agent;
+pub mod deep;
+pub mod react;
 pub mod runner;
 pub mod state;
-pub mod react;
-pub mod deep;
+
+pub use agent::react::{GraphReActAgent, GraphReActAgentBuilder};
+pub use agent::{Agent, AgentError, AgentEvent, AgentInput, AgentOutput};

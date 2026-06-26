@@ -56,6 +56,7 @@ impl From<serde_json::Error> for Error {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<reqwest::Error> for Error {
     fn from(e: reqwest::Error) -> Self {
         Self::new("NETWORK_ERROR", e.to_string()).with_source(e)
