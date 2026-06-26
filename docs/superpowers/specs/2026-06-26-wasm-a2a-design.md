@@ -7,23 +7,54 @@
 
 ## 背景与目标
 
-### 项目定位
-- **神经元（Synapse）**：开源基础库，提供构建 agent 的全部能力（schema、adk、compose、callbacks、a2a、components）
-- **前额叶（PFC）**：下游项目，使用 Synapse 二次构建具体业务 agent
+### Agent 本质
+Agent 是**基于大模型 API 调用**实现的一个**独立程序**，核心能力包括：
+- **思考（Thinking）**：通过 LLM API 进行推理
+- **Function Call**：调用外部工具
+- **MCP**：Model Context Protocol 工具集成
+- **Skill**：技能模块
+
+agent 是一个 standalone 程序（binary），可以：
+- 编译为 native binary（Linux/Mac/Windows）
+- 编译为 WASM 模块（被 PFC 加载到隔离 sandbox 中执行）
+
+### 项目职责边界
+
+| 项目 | 职责 | 不负责 |
+|------|------|--------|
+| **神经元 Synapse（本项目）** | 提供**单 agent** 的工具、模板、协议 | 多 agent 运行时、进程隔离 |
+| **前额叶 PFC** | 提供**多 agent 编排 + WASM 隔离运行时** | 单一 agent 的实现细节 |
+
+具体而言：
+- **Synapse** 提供：
+  - schema（消息、工具、数据结构）
+  - components（model/tool/embedding/retriever）
+  - adk（agent 抽象、Agent trait、状态管理）
+  - compose（Runnable、Graph、Chain、ToolsNode）
+  - callbacks（observability）
+  - a2a（A2A 协议）
+  - **HttpClient transport 抽象**（本次新增 — WASM 兼容）
+  - **高层 LLM Client API**（本次新增 — 避免 PFC 重复实现）
+- **PFC** 提供：
+  - 多 agent 编排（host / plan-execute / multi-agent pattern）
+  - WASM sandbox 运行时（用 wasmtime / wasmer 加载 .wasm 模块）
+  - 进程级隔离（每个 agent 跑在独立 sandbox）
+  - agent 间通过 A2A 协议通讯（这部分 A2A 客户端由 Synapse 提供，但 host 端在 PFC）
 
 ### 当前痛点
-PFC 需要支持 WASM agent 场景。WASM agent 需要：
+PFC 加载 WASM agent 时，agent 内部需要：
 1. 作为 **A2A 客户端**：调用其他 A2A 端点
-2. 作为 **A2A 服务端**：暴露自己作为 A2A 端点被调用
+2. 作为 **A2A 服务端**：暴露自己作为 A2A 端点被 host / 其他 agent 调用
 3. 同样支持 LLM HTTP 调用外部服务（OpenAI/Anthropic/...）
 
 但 Synapse 当前实现有阻塞点：
 - `src/protocol/a2a_adapter.rs` 直接使用 `reqwest::Client` — WASM 不可用
 - `src/components/model/openai.rs` 直接使用 `reqwest::Client` — WASM 不可用
-- 任何 PFC 下游使用方如果想做 WASM 版本，必须重写这两段
+- PFC 加载的 WASM agent 无法调用 LLM，也无法做 A2A 通信
 
 ### 目标
-**将 WASM agent 能力下沉到 Synapse 内部**，使得 PFC 不再关心 native/wasm 差异，使用同一套 API 即可。
+**将 WASM agent 通信所需的"原语"下沉到 Synapse**（HttpClient trait + LLM Client 高层 API + A2A 重构），
+使得 PFC 加载的 WASM agent 能直接使用 Synapse API 完成 LLM 调用和 A2A 通信，无需在 WASM 端重新实现 transport 层。
 
 ## 设计决策摘要
 
@@ -417,20 +448,68 @@ wasi = "0.14"
 | WASI 测试需要 wasmtime 环境 | Makefile + CI 脚本提供一键测试 |
 | `BaseTool` 不是 dyn-compatible（已有问题） | 与本次 WASM 工作解耦，独立处理 |
 
-## 不在本次范围
+## 不在本次范围（明确边界）
 
 - 浏览器（browser）target — 用户确认仅 WASI
 - Edge / Cloudflare Workers target
-- MCP 协议
+- MCP 协议（**注意**：MCP 集成属于 Synapse，但本次只下沉 transport，不包含 MCP 协议实现）
 - HTTP/2 / WebSocket transport
-- WASI 0.3 / component model（如果 wasi 0.2 满足需求）
+- WASI 0.3 / component model
+- **多 agent 运行时 / agent 编排** — 明确属于 PFC
+- **WASM sandbox / 进程隔离** — 明确属于 PFC
+- **WASM host function 设计**（PFC 如何 host 一个 .wasm 模块）— 明确属于 PFC
+
+## PFC 与 Synapse 的协作关系
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ PFC 进程（native binary）                                    │
+│ ├─ wasmtime 运行时                                           │
+│ ├─ 多 agent 编排器（host / plan-execute）                     │
+│ └─ 实例化 WASM 模块（每个 agent 独立 sandbox）                 │
+│         │                                                    │
+│         │ host function (wasi::http, wasi::random, ...)       │
+│         ▼                                                    │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │  WASM 模块（独立进程隔离）                                │ │
+│ │  ┌──────────────────────────────────────────────────┐    │ │
+│ │  │ Synapse (compiled to wasm32-wasi)                │    │ │
+│ │  │  ├─ Agent (业务逻辑)                              │    │ │
+│ │  │  ├─ llm::OpenAIClient ──► HttpClient (trait)    │    │ │
+│ │  │  └─ A2AAdapter ─────────► HttpClient (trait)    │    │ │
+│ │  │              │                                  │    │ │
+│ │  │              ▼                                  │    │ │
+│ │  │       WasiHttpClient (wasi::http)              │    │ │
+│ │  └─────────────────┬────────────────────────────────┘    │ │
+│ └────────────────────┼───────────────────────────────────┘ │
+└─────────────────────┼─────────────────────────────────────┘
+                      │ wasi::http outgoing
+                      ▼
+              OpenAI API / Other A2A endpoints
+```
+
+**关键点：**
+- Synapse 编译为 `.wasm` 模块，被 PFC 加载
+- WASM 模块内部使用 `HttpClient` trait
+- `WasiHttpClient` 实现调用 `wasi::http`，由 wasmtime 提供 host function
+- PFC 的 host function 注册告诉 wasmtime "如何使用 wasi::http"
+- 这就是为什么 transport 必须用 trait：wasi::http 由 host（PFC）提供
 
 ## 验收标准
 
+### Synapse 侧
 - [ ] `cargo build --target x86_64-unknown-linux-gnu` 通过
-- [ ] `cargo build --target wasm32-wasi` 通过（首次构建，可能需要装 target）
-- [ ] 所有现有 47 个测试通过
-- [ ] 新增 transport 模块测试 ≥ 5 个
-- [ ] PFC native e2e 测试通过（A2A client/server）
-- [ ] PFC wasm32-wasi e2e 测试通过（在 wasmtime 中运行 A2A client/server）
-- [ ] A2A 双向通信测试：native agent <-> wasm agent 通过 A2A 协议通信成功
+- [ ] `cargo build --target wasm32-wasi` 通过（首次构建可能需要装 target）
+- [ ] 所有现有 47 个测试通过（native）
+- [ ] 新增 transport 模块测试 ≥ 5 个（native）
+- [ ] `WasiHttpClient` 单元测试通过（用 wasmtime + 本地 mock server）
+
+### PFC 侧（不在本 spec 实现，但作为验收参考）
+- [ ] PFC native 加载 Synapse 编译的 native binary，e2e 测试通过
+- [ ] PFC 加载 Synapse 编译的 .wasm 模块，e2e 测试通过
+- [ ] PFC 加载的 WASM agent 调用外部 OpenAI API 成功
+- [ ] PFC 加载的 WASM agent 作为 A2A 客户端调用其他 A2A 端点成功
+- [ ] PFC 加载的 WASM agent 作为 A2A 服务端被 host 调用成功
+
+### 端到端
+- [ ] native A2A agent <-> wasm A2A agent 通过 A2A 协议双向通信成功（一个在 native 进程，一个在 PFC 管理的 WASM sandbox 中）
