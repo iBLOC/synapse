@@ -157,6 +157,9 @@ fn build_graph(
     graph.add_node("tools", Arc::new(tools_node));
 
     graph.add_edge(START, "chat");
+    graph.add_edge("chat", "tools");
+    graph.add_edge("chat", END);
+    graph.add_edge("tools", END);
 
     let has_tool_calls_branch = GraphBranch::new(
         move |_ctx: &Context, input: &serde_json::Value| {
@@ -167,21 +170,11 @@ fn build_graph(
             }
             Ok(None)
         },
-        vec!["chat".to_string(), END.to_string()]
-            .into_iter()
-            .collect(),
-    );
-    graph.add_branch("chat", has_tool_calls_branch);
-
-    graph.add_edge("tools", "chat");
-
-    let return_directly_branch = GraphBranch::new(
-        move |_ctx: &Context, _input: &serde_json::Value| Ok(None),
         vec!["tools".to_string(), END.to_string()]
             .into_iter()
             .collect(),
     );
-    graph.add_branch("tools", return_directly_branch);
+    graph.add_branch("chat", has_tool_calls_branch);
 
     graph
         .compile_with_options(GraphCompileOptions {
@@ -202,31 +195,32 @@ impl ToolsGraphNode {
 impl Runnable<serde_json::Value, serde_json::Value> for ToolsGraphNode {
     fn invoke(&self, _ctx: Context, input: serde_json::Value) -> RunnableFuture<serde_json::Value> {
         Box::pin(async move {
-            let msg: Message = serde_json::from_value(input)
-                .map_err(|e| RunnableError::InvalidInput(e.to_string()))?;
+            let msg: Message = match serde_json::from_value(input.clone()) {
+                Ok(m) => m,
+                Err(_) => return Ok(input),
+            };
 
             let tool_calls = msg.tool_calls.clone().unwrap_or_default();
             if tool_calls.is_empty() {
-                return serde_json::to_value(&msg)
-                    .map_err(|e| RunnableError::Invoke(e.to_string()));
+                return Ok(input);
             }
 
-            let mut result_messages = Vec::new();
-            for tc in tool_calls {
-                let tool_result_msg = Message {
-                    role: RoleType::Tool,
-                    content: Content::Text(format!(
-                        "Tool {} result: tool not found",
-                        tc.function.name
-                    )),
-                    name: Some(tc.function.name),
-                    tool_call_id: Some(tc.id),
-                    tool_calls: None,
-                };
-                result_messages.push(tool_result_msg);
+            let mut combined_text = String::new();
+            for tc in &tool_calls {
+                combined_text.push_str(&format!(
+                    "Tool {} result: tool not found\n",
+                    tc.function.name
+                ));
             }
+            let result_msg = Message {
+                role: RoleType::Tool,
+                content: Content::Text(combined_text),
+                name: None,
+                tool_call_id: None,
+                tool_calls: None,
+            };
 
-            serde_json::to_value(result_messages).map_err(|e| RunnableError::Invoke(e.to_string()))
+            serde_json::to_value(result_msg).map_err(|e| RunnableError::Invoke(e.to_string()))
         })
     }
 
