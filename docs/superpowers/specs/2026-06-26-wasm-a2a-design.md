@@ -3,13 +3,26 @@
 > **作者：** Synapse 架构组
 > **状态：** 草案
 > **日期：** 2026-06-26
-> **关联项目：** 神经元（Synapse / 本项目）/ 前额叶（PFC / 下游使用方）
+> **关联项目：** 神经突触 Synapse（本项目）/ 神经元 Neuron / 前额叶 PFC
 
 ## 背景与目标
 
+### 三项目定位（核心澄清）
+
+| 项目 | 中文名 | 英文名 | 角色 | 对标 |
+|------|--------|--------|------|------|
+| **神经突触** | 神经突触 | **Synapse** | **Agent 开发工具包**（本项目） | LangChain / Eino |
+| **神经元** | 神经元 | **Neuron** | **LLM 运行时**（提供 LLM 运行能力） | vLLM / Ollama / TGI |
+| **前额叶** | 前额叶 | **PFC** | **多 agent 编排 + WASM 隔离运行时** | OpenClaw / EVA |
+
+**关键澄清：**
+- **Synapse**（本项目）是**库**（library），不是运行时。对标 LangChain/Eino，开发者 import Synapse 来构建 agent
+- **Neuron** 是**独立项目**，作为 LLM serving runtime。它暴露 OpenAI 兼容 HTTP API，Synapse 通过 HTTP 调用 Neuron
+- **PFC** 是**独立项目**，作为多 agent runtime。它加载并运行由 Synapse 编译的 agent 模块（native 或 WASM）
+
 ### Agent 本质
 Agent 是**基于大模型 API 调用**实现的一个**独立程序**，核心能力包括：
-- **思考（Thinking）**：通过 LLM API 进行推理
+- **思考（Thinking）**：通过 LLM API 进行推理（调用 Neuron 或外部 API）
 - **Function Call**：调用外部工具
 - **MCP**：Model Context Protocol 工具集成
 - **Skill**：技能模块
@@ -22,8 +35,9 @@ agent 是一个 standalone 程序（binary），可以：
 
 | 项目 | 职责 | 不负责 |
 |------|------|--------|
-| **神经元 Synapse（本项目）** | 提供**单 agent** 的工具、模板、协议 | 多 agent 运行时、进程隔离 |
-| **前额叶 PFC** | 提供**多 agent 编排 + WASM 隔离运行时** | 单一 agent 的实现细节 |
+| **Synapse（本项目）** | 提供**单 agent** 的工具、模板、协议、组件、LLM HTTP 抽象 | LLM serving、多 agent 运行时、WASM sandbox |
+| **Neuron** | LLM 推理服务、模型管理、推理优化 | Agent 框架、工具集成 |
+| **PFC** | 多 agent 编排、host / plan-execute 模式、WASM sandbox、agent 隔离 | LLM serving、agent 内部逻辑 |
 
 具体而言：
 - **Synapse** 提供：
@@ -34,27 +48,34 @@ agent 是一个 standalone 程序（binary），可以：
   - callbacks（observability）
   - a2a（A2A 协议）
   - **HttpClient transport 抽象**（本次新增 — WASM 兼容）
-  - **高层 LLM Client API**（本次新增 — 避免 PFC 重复实现）
+  - **高层 LLM Client API**（本次新增 — Neuron 兼容 + OpenAI/Anthropic 兼容）
+- **Neuron** 提供：
+  - OpenAI 兼容 HTTP API
+  - 模型推理、batch、流式响应
+  - 多种模型后端（Llama / Qwen / GPT 等）
+  - 资源调度、GPU 管理
 - **PFC** 提供：
   - 多 agent 编排（host / plan-execute / multi-agent pattern）
   - WASM sandbox 运行时（用 wasmtime / wasmer 加载 .wasm 模块）
   - 进程级隔离（每个 agent 跑在独立 sandbox）
-  - agent 间通过 A2A 协议通讯（这部分 A2A 客户端由 Synapse 提供，但 host 端在 PFC）
+  - agent 间通过 A2A 协议通讯
+  - 调用 Synapse 编译的 agent 模块（native 进程或 WASM sandbox）
 
 ### 当前痛点
 PFC 加载 WASM agent 时，agent 内部需要：
 1. 作为 **A2A 客户端**：调用其他 A2A 端点
 2. 作为 **A2A 服务端**：暴露自己作为 A2A 端点被 host / 其他 agent 调用
-3. 同样支持 LLM HTTP 调用外部服务（OpenAI/Anthropic/...）
+3. 调用 **Neuron**（OpenAI 兼容 API）做 LLM 推理
+4. 调用 **OpenAI / Anthropic** 等外部 LLM API
 
 但 Synapse 当前实现有阻塞点：
 - `src/protocol/a2a_adapter.rs` 直接使用 `reqwest::Client` — WASM 不可用
 - `src/components/model/openai.rs` 直接使用 `reqwest::Client` — WASM 不可用
-- PFC 加载的 WASM agent 无法调用 LLM，也无法做 A2A 通信
+- PFC 加载的 WASM agent 无法调用 Neuron / 外部 LLM，也无法做 A2A 通信
 
 ### 目标
 **将 WASM agent 通信所需的"原语"下沉到 Synapse**（HttpClient trait + LLM Client 高层 API + A2A 重构），
-使得 PFC 加载的 WASM agent 能直接使用 Synapse API 完成 LLM 调用和 A2A 通信，无需在 WASM 端重新实现 transport 层。
+使得 PFC 加载的 WASM agent 能直接使用 Synapse API 完成 LLM 调用（无论是 Neuron 还是外部 API）和 A2A 通信，无需在 WASM 端重新实现 transport 层。
 
 ## 设计决策摘要
 
@@ -459,57 +480,71 @@ wasi = "0.14"
 - **WASM sandbox / 进程隔离** — 明确属于 PFC
 - **WASM host function 设计**（PFC 如何 host 一个 .wasm 模块）— 明确属于 PFC
 
-## PFC 与 Synapse 的协作关系
+## PFC / Synapse / Neuron 三项目协作关系
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│ PFC 进程（native binary）                                    │
-│ ├─ wasmtime 运行时                                           │
-│ ├─ 多 agent 编排器（host / plan-execute）                     │
-│ └─ 实例化 WASM 模块（每个 agent 独立 sandbox）                 │
-│         │                                                    │
-│         │ host function (wasi::http, wasi::random, ...)       │
-│         ▼                                                    │
-│ ┌──────────────────────────────────────────────────────────┐ │
-│ │  WASM 模块（独立进程隔离）                                │ │
-│ │  ┌──────────────────────────────────────────────────┐    │ │
-│ │  │ Synapse (compiled to wasm32-wasi)                │    │ │
-│ │  │  ├─ Agent (业务逻辑)                              │    │ │
-│ │  │  ├─ llm::OpenAIClient ──► HttpClient (trait)    │    │ │
-│ │  │  └─ A2AAdapter ─────────► HttpClient (trait)    │    │ │
-│ │  │              │                                  │    │ │
-│ │  │              ▼                                  │    │ │
-│ │  │       WasiHttpClient (wasi::http)              │    │ │
-│ │  └─────────────────┬────────────────────────────────┘    │ │
-│ └────────────────────┼───────────────────────────────────┘ │
-└─────────────────────┼─────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│ PFC 进程（native binary）                                            │
+│ ├─ wasmtime 运行时                                                  │
+│ ├─ 多 agent 编排器（host / plan-execute）                            │
+│ └─ 实例化 WASM 模块（每个 agent 独立 sandbox）                        │
+│         │                                                            │
+│         │ host function (wasi::http, wasi::random, ...)              │
+│         ▼                                                            │
+│ ┌────────────────────────────────────────────────────────────────┐ │
+│ │  WASM 模块（独立进程隔离）                                      │ │
+│ │  ┌──────────────────────────────────────────────────────┐      │ │
+│ │  │ Synapse (compiled to wasm32-wasi)                    │      │ │
+│ │  │  ├─ Agent (业务逻辑)                                 │      │ │
+│ │  │  ├─ llm::OpenAIClient ──► HttpClient (trait)        │      │ │
+│ │  │  └─ A2AAdapter ─────────► HttpClient (trait)        │      │ │
+│ │  │              │                                      │      │ │
+│ │  │              ▼                                      │      │ │
+│ │  │       WasiHttpClient (wasi::http)                  │      │ │
+│ │  └─────────────────┬──────────────────────────────────┘      │ │
+│ └────────────────────┼─────────────────────────────────────────┘ │
+└─────────────────────┼───────────────────────────────────────────┘
                       │ wasi::http outgoing
-                      ▼
-              OpenAI API / Other A2A endpoints
+        ┌─────────────┼──────────────────┐
+        ▼             ▼                  ▼
+┌──────────────┐ ┌──────────┐   ┌─────────────────┐
+│ Neuron       │ │ 外部 LLM │   │ 其他 A2A 端点    │
+│ (OpenAI 兼容)│ │ (OpenAI/ │   │ (PFC / 其他     │
+│              │ │Anthropic)│   │  agent)         │
+└──────────────┘ └──────────┘   └─────────────────┘
 ```
 
 **关键点：**
-- Synapse 编译为 `.wasm` 模块，被 PFC 加载
-- WASM 模块内部使用 `HttpClient` trait
-- `WasiHttpClient` 实现调用 `wasi::http`，由 wasmtime 提供 host function
-- PFC 的 host function 注册告诉 wasmtime "如何使用 wasi::http"
+- **Neuron 暴露 OpenAI 兼容 API**，所以 Synapse 端的 `OpenAIClient` 直接可用（设 `base_url` 即可）
+- **WASM agent 内部**用 Synapse 的 `OpenAIClient` 调 LLM，用 `A2AAdapter` 做 A2A 通信
+- **HttpClient trait** 是核心抽象：WASM 端用 `WasiHttpClient`（wasi::http），native 端用 `ReqwestHttpClient`
+- **PFC 通过 host function** 提供 wasi::http 给 WASM 模块
 - 这就是为什么 transport 必须用 trait：wasi::http 由 host（PFC）提供
 
 ## 验收标准
 
-### Synapse 侧
+### Synapse 侧（本项目）
 - [ ] `cargo build --target x86_64-unknown-linux-gnu` 通过
 - [ ] `cargo build --target wasm32-wasi` 通过（首次构建可能需要装 target）
 - [ ] 所有现有 47 个测试通过（native）
 - [ ] 新增 transport 模块测试 ≥ 5 个（native）
 - [ ] `WasiHttpClient` 单元测试通过（用 wasmtime + 本地 mock server）
+- [ ] `OpenAIClient` 测试覆盖 Neuron / OpenAI / Anthropic 三个 base_url
 
 ### PFC 侧（不在本 spec 实现，但作为验收参考）
 - [ ] PFC native 加载 Synapse 编译的 native binary，e2e 测试通过
 - [ ] PFC 加载 Synapse 编译的 .wasm 模块，e2e 测试通过
+- [ ] PFC 加载的 WASM agent 调用 Neuron（OpenAI 兼容 API）成功
 - [ ] PFC 加载的 WASM agent 调用外部 OpenAI API 成功
 - [ ] PFC 加载的 WASM agent 作为 A2A 客户端调用其他 A2A 端点成功
 - [ ] PFC 加载的 WASM agent 作为 A2A 服务端被 host 调用成功
 
+### Neuron 侧（不在本 spec 实现，但作为依赖）
+- [ ] Neuron 暴露 OpenAI 兼容 HTTP API
+- [ ] Synapse `OpenAIClient` 设置 `base_url` 即可对接 Neuron
+- [ ] Neuron 与 OpenAI API 行为兼容（chat/completions / streaming 端点）
+
 ### 端到端
 - [ ] native A2A agent <-> wasm A2A agent 通过 A2A 协议双向通信成功（一个在 native 进程，一个在 PFC 管理的 WASM sandbox 中）
+- [ ] WASM agent 通过 Neuron 推理 LLM，PFC host 观察 token 流转正确
+- [ ] 三个项目（PFC + Synapse + Neuron）联调 e2e 测试通过
