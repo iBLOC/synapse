@@ -1,9 +1,11 @@
 use async_trait::async_trait;
+#[cfg(not(target_arch = "wasm32"))]
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use crate::components::model::{BaseChatModel, GenerateOptions, ModelError, StreamReader};
 use crate::schema::Message;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct OpenAIChatModel {
     client: Client,
     api_key: String,
@@ -11,12 +13,14 @@ pub struct OpenAIChatModel {
     model: String,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct OpenAIConfig {
     pub api_key: String,
     pub model: String,
     pub base_url: Option<String>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl OpenAIChatModel {
     pub fn new(config: OpenAIConfig) -> Self {
         let base_url = config.base_url.unwrap_or_else(|| "https://api.openai.com".to_string());
@@ -134,6 +138,7 @@ impl OpenAIChatModel {
 }
 
 #[async_trait]
+#[cfg(not(target_arch = "wasm32"))]
 impl BaseChatModel for OpenAIChatModel {
     async fn generate(
         &self,
@@ -290,12 +295,14 @@ struct OpenAIDeltaChoice {
     finish_reason: Option<String>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct OpenAIChatModelBuilder {
     api_key: Option<String>,
     model: Option<String>,
     base_url: Option<String>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl OpenAIChatModelBuilder {
     pub fn new() -> Self {
         Self {
@@ -332,6 +339,7 @@ impl OpenAIChatModelBuilder {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for OpenAIChatModelBuilder {
     fn default() -> Self {
         Self::new()

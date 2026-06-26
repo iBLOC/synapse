@@ -139,6 +139,9 @@ pub enum ResponseFormat {
     Json,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod openai;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod anthropic;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod azure;

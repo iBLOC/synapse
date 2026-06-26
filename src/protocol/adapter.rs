@@ -128,7 +128,9 @@ impl ProtocolAdapterRegistry {
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register(Box::new(super::a2a_adapter::A2AAdapter::new_default()));
+        #[cfg(not(target_arch = "wasm32"))]
         registry.register(Box::new(super::opencode_adapter::OpenCodeAdapter::new()));
+        #[cfg(not(target_arch = "wasm32"))]
         registry.register(Box::new(super::openglow_adapter::OpenGlowAdapter::new()));
         registry
     }

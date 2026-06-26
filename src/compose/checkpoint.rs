@@ -216,10 +216,12 @@ impl CheckPointStore for MemoryCheckPointStore {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct FileCheckPointStore {
     dir: std::path::PathBuf,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl FileCheckPointStore {
     pub fn new(dir: impl Into<std::path::PathBuf>) -> Self {
         Self { dir: dir.into() }
@@ -227,6 +229,7 @@ impl FileCheckPointStore {
 }
 
 #[async_trait]
+#[cfg(not(target_arch = "wasm32"))]
 impl CheckPointStore for FileCheckPointStore {
     async fn get(&self, id: &str) -> CheckpointResult<Option<Vec<u8>>> {
         let path = self.dir.join(format!("{}.json", id));

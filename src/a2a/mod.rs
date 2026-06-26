@@ -1,14 +1,18 @@
 pub mod protocol;
 pub mod card;
 
+#[cfg(not(target_arch = "wasm32"))]
 use protocol::{
-    JsonRpcRequest, JsonRpcResponse, JsonRpcError, Task, Message, TaskSendParams, 
+    JsonRpcRequest, JsonRpcResponse, JsonRpcError, Task, Message, TaskSendParams,
     TaskGetParams, TaskCancelParams, ERR_INTERNAL_ERROR, AgentsGetParams,
 };
+#[cfg(not(target_arch = "wasm32"))]
 use card::AgentCard;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub type A2AResult<T> = Result<T, A2AError>;
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Debug, thiserror::Error)]
 pub enum A2AError {
     #[error("network error: {0}")]
@@ -23,11 +27,13 @@ pub enum A2AError {
     AgentNotFound,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct A2AClient {
     client: reqwest::Client,
     agent_url: String,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl A2AClient {
     pub fn new(agent_url: impl Into<String>) -> Self {
         Self {
@@ -158,17 +164,20 @@ impl A2AClient {
 use async_trait::async_trait;
 
 #[async_trait]
+#[cfg(not(target_arch = "wasm32"))]
 pub trait TaskHandler: Send + Sync {
     async fn handle_task(&self, task_id: String, message: Message) -> A2AResult<Task>;
     fn get_task(&self, task_id: &str) -> A2AResult<Task>;
     fn cancel_task(&self, task_id: &str) -> A2AResult<()>;
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub struct A2AServer {
     card: AgentCard,
     task_handler: Box<dyn TaskHandler>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl A2AServer {
     pub fn new(card: AgentCard, handler: Box<dyn TaskHandler>) -> Self {
         Self {

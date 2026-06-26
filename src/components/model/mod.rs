@@ -133,4 +133,6 @@ impl Clone for StreamWriter {
 pub type BoxStreamReader = Pin<Box<dyn Stream<Item = Result<crate::schema::Message, ModelError>> + Send>>;
 
 pub mod openai;
-pub use openai::{OpenAIModel, OpenAIChatModel, OpenAIConfig, OpenAIChatModelBuilder};
+pub use openai::OpenAIModel;
+#[cfg(not(target_arch = "wasm32"))]
+pub use openai::{OpenAIChatModel, OpenAIConfig, OpenAIChatModelBuilder};
