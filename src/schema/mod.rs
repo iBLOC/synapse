@@ -19,6 +19,17 @@ pub enum RoleType {
     Tool,
 }
 
+impl RoleType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            RoleType::System => "system",
+            RoleType::User => "user",
+            RoleType::Assistant => "assistant",
+            RoleType::Tool => "tool",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Content {
