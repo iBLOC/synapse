@@ -21,7 +21,7 @@ impl AgentProtocol {
             _ => AgentProtocol::Custom(s.to_string()),
         }
     }
-    
+
     pub fn as_str(&self) -> &str {
         match self {
             AgentProtocol::A2A => "a2a",
@@ -86,13 +86,21 @@ pub type AdapterResult<T> = std::result::Result<T, String>;
 #[async_trait]
 pub trait AgentAdapter: Send + Sync {
     fn protocol(&self) -> AgentProtocol;
-    
-    async fn send_task(&self, endpoint: &AgentEndpoint, request: &AgentRequest) -> AdapterResult<AgentResponse>;
-    
-    async fn get_task_status(&self, endpoint: &AgentEndpoint, task_id: &str) -> AdapterResult<AgentResponse>;
-    
+
+    async fn send_task(
+        &self,
+        endpoint: &AgentEndpoint,
+        request: &AgentRequest,
+    ) -> AdapterResult<AgentResponse>;
+
+    async fn get_task_status(
+        &self,
+        endpoint: &AgentEndpoint,
+        task_id: &str,
+    ) -> AdapterResult<AgentResponse>;
+
     async fn cancel_task(&self, endpoint: &AgentEndpoint, task_id: &str) -> AdapterResult<()>;
-    
+
     async fn discover_agent(&self, url: &str) -> AdapterResult<AgentEndpoint>;
 }
 
@@ -108,23 +116,26 @@ impl ProtocolAdapterRegistry {
             adapters: Vec::new(),
         }
     }
-    
+
     pub fn register(&mut self, adapter: BoxedAdapter) {
         self.adapters.push(adapter);
     }
-    
+
     pub fn get(&self, protocol: &AgentProtocol) -> Option<&dyn AgentAdapter> {
-        self.adapters.iter().find(|a| a.protocol() == *protocol).map(|b| b.as_ref())
+        self.adapters
+            .iter()
+            .find(|a| a.protocol() == *protocol)
+            .map(|b| b.as_ref())
     }
-    
+
     pub fn get_for_endpoint(&self, endpoint: &AgentEndpoint) -> Option<&dyn AgentAdapter> {
         self.get(&endpoint.protocol)
     }
-    
+
     pub fn protocols(&self) -> Vec<AgentProtocol> {
         self.adapters.iter().map(|a| a.protocol()).collect()
     }
-    
+
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register(Box::new(super::a2a_adapter::A2AAdapter::new_default()));

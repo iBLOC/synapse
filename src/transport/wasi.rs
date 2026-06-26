@@ -4,17 +4,22 @@ use async_trait::async_trait;
 pub struct WasiHttpClient;
 
 impl WasiHttpClient {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 #[async_trait]
 impl HttpClient for WasiHttpClient {
     async fn execute(&self, req: HttpRequest) -> Result<HttpResponse, HttpError> {
-        let (scheme, authority, path) = parse_url(&req.url)
-            .map_err(|e| HttpError::Request(format!("URL parse: {}", e)))?;
+        let (scheme, authority, path) =
+            parse_url(&req.url).map_err(|e| HttpError::Request(format!("URL parse: {}", e)))?;
 
         if scheme != "https" && scheme != "http" {
-            return Err(HttpError::Request(format!("unsupported scheme: {}", scheme)));
+            return Err(HttpError::Request(format!(
+                "unsupported scheme: {}",
+                scheme
+            )));
         }
 
         Err(HttpError::Request(format!(
@@ -41,4 +46,3 @@ fn parse_url(url: &str) -> Result<(String, String, String), String> {
 
     Ok((scheme.to_string(), authority.to_string(), path.to_string()))
 }
-

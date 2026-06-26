@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::schema::Message;
+use async_trait::async_trait;
 
 pub mod react;
 
@@ -50,9 +50,9 @@ pub struct AgentEvent {
 pub trait Agent: Send + Sync {
     fn name(&self) -> String;
     fn description(&self) -> String;
-    
+
     async fn run(&self, input: AgentInput) -> AgentResult<AgentEvent>;
-    
+
     async fn resume(&self, checkpoint: Vec<u8>, info: ResumeInfo) -> AgentResult<AgentEvent>;
 }
 

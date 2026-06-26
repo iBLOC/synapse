@@ -1,6 +1,6 @@
+use crate::schema::{ToolArgument, ToolInfo, ToolResult};
 use async_trait::async_trait;
 use futures::stream::Stream;
-use crate::schema::{ToolInfo, ToolArgument, ToolResult};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 

@@ -1,9 +1,12 @@
-use std::sync::Arc;
 use async_trait::async_trait;
 use serde_json::json;
+use std::sync::Arc;
 
+use crate::protocol::{
+    AdapterResult, AgentAdapter, AgentEndpoint, AgentProtocol, AgentRequest, AgentResponse,
+    ProtocolAdapterRegistry, ProtocolMessage, TaskStatus, TokenUsage,
+};
 use crate::transport::HttpClient;
-use crate::protocol::{AgentAdapter, AgentEndpoint, AgentProtocol, AgentRequest, AgentResponse, ProtocolMessage, ProtocolAdapterRegistry, TaskStatus, TokenUsage, AdapterResult};
 
 pub struct A2AAdapter {
     http: Arc<dyn HttpClient>,
@@ -37,7 +40,11 @@ impl AgentAdapter for A2AAdapter {
         AgentProtocol::A2A
     }
 
-    async fn send_task(&self, endpoint: &AgentEndpoint, request: &AgentRequest) -> AdapterResult<AgentResponse> {
+    async fn send_task(
+        &self,
+        endpoint: &AgentEndpoint,
+        request: &AgentRequest,
+    ) -> AdapterResult<AgentResponse> {
         let last_msg = request.messages.last();
         let message = json!({
             "role": last_msg.map(|m| m.role.as_str()).unwrap_or("user"),
@@ -57,7 +64,10 @@ impl AgentAdapter for A2AAdapter {
             }
         });
 
-        let rpc_response: serde_json::Value = self.http.post_json(&endpoint.url, &rpc_request).await
+        let rpc_response: serde_json::Value = self
+            .http
+            .post_json(&endpoint.url, &rpc_request)
+            .await
             .map_err(|e| e.to_string())?;
 
         if let Some(error) = rpc_response.get("error") {
@@ -77,13 +87,20 @@ impl AgentAdapter for A2AAdapter {
         let messages: Vec<ProtocolMessage> = task["messages"]
             .as_array()
             .map(|arr| {
-                arr.iter().filter_map(|m| {
-                    Some(ProtocolMessage {
-                        role: m["role"].as_str()?.to_string(),
-                        content: m["parts"].as_array()?.first()?.get("text")?.as_str()?.to_string(),
-                        metadata: serde_json::Value::Null,
+                arr.iter()
+                    .filter_map(|m| {
+                        Some(ProtocolMessage {
+                            role: m["role"].as_str()?.to_string(),
+                            content: m["parts"]
+                                .as_array()?
+                                .first()?
+                                .get("text")?
+                                .as_str()?
+                                .to_string(),
+                            metadata: serde_json::Value::Null,
+                        })
                     })
-                }).collect()
+                    .collect()
             })
             .unwrap_or_default();
 
@@ -98,7 +115,11 @@ impl AgentAdapter for A2AAdapter {
         })
     }
 
-    async fn get_task_status(&self, endpoint: &AgentEndpoint, task_id: &str) -> AdapterResult<AgentResponse> {
+    async fn get_task_status(
+        &self,
+        endpoint: &AgentEndpoint,
+        task_id: &str,
+    ) -> AdapterResult<AgentResponse> {
         let rpc_request = json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -106,7 +127,10 @@ impl AgentAdapter for A2AAdapter {
             "params": { "id": task_id }
         });
 
-        let rpc_response: serde_json::Value = self.http.post_json(&endpoint.url, &rpc_request).await
+        let rpc_response: serde_json::Value = self
+            .http
+            .post_json(&endpoint.url, &rpc_request)
+            .await
             .map_err(|e| e.to_string())?;
         let task = rpc_response["result"].clone();
 
@@ -122,7 +146,10 @@ impl AgentAdapter for A2AAdapter {
             task_id: task_id.to_string(),
             status,
             messages: vec![],
-            result: task.get("result").cloned().unwrap_or(serde_json::Value::Null),
+            result: task
+                .get("result")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null),
             usage: TokenUsage::default(),
         })
     }
@@ -135,7 +162,10 @@ impl AgentAdapter for A2AAdapter {
             "params": { "id": task_id }
         });
 
-        let _: serde_json::Value = self.http.post_json(&endpoint.url, &rpc_request).await
+        let _: serde_json::Value = self
+            .http
+            .post_json(&endpoint.url, &rpc_request)
+            .await
             .map_err(|e| e.to_string())?;
         Ok(())
     }
@@ -148,12 +178,19 @@ impl AgentAdapter for A2AAdapter {
             "params": { "url": url }
         });
 
-        let card: serde_json::Value = self.http.post_json(url, &rpc_request).await
+        let card: serde_json::Value = self
+            .http
+            .post_json(url, &rpc_request)
+            .await
             .map_err(|e| e.to_string())?;
 
         let capabilities = card["capabilities"]
             .as_array()
-            .map(|arr| arr.iter().filter_map(|c| c.as_str().map(String::from)).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|c| c.as_str().map(String::from))
+                    .collect()
+            })
             .unwrap_or_default();
 
         Ok(AgentEndpoint {

@@ -1,10 +1,10 @@
+use crate::components::tool::{BaseTool, InvokableTool, ToolError};
+use crate::compose::runnable::stream::channel;
+use crate::compose::runnable::{Context, Runnable, RunnableError, RunnableFuture, RunnableResult};
+use crate::compose::StreamReader;
+use crate::schema::{FunctionCall, Message, RoleType, ToolCall, ToolInfo, ToolResult};
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::components::tool::{BaseTool, InvokableTool, ToolError};
-use crate::schema::{Message, RoleType, ToolCall, FunctionCall, ToolInfo, ToolResult};
-use crate::compose::StreamReader;
-use crate::compose::runnable::{Runnable, RunnableFuture, RunnableResult, RunnableError, Context};
-use crate::compose::runnable::stream::channel;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ToolsNodeError {
@@ -44,10 +44,19 @@ pub struct EnhancedStreamToolOutput {
     pub result: StreamReader<ToolResult>,
 }
 
-pub type InvokableEndpoint = Arc<dyn Fn(ToolInput) -> Result<ToolOutput, ToolsNodeError> + Send + Sync + 'static>;
-pub type StreamEndpoint = Arc<dyn Fn(ToolInput) -> Result<StreamToolOutput, ToolsNodeError> + Send + Sync + 'static>;
-pub type EnhancedInvokableEndpoint = Arc<dyn Fn(ToolInput) -> Result<EnhancedInvokableToolOutput, ToolsNodeError> + Send + Sync + 'static>;
-pub type EnhancedStreamEndpoint = Arc<dyn Fn(ToolInput) -> Result<EnhancedStreamToolOutput, ToolsNodeError> + Send + Sync + 'static>;
+pub type InvokableEndpoint =
+    Arc<dyn Fn(ToolInput) -> Result<ToolOutput, ToolsNodeError> + Send + Sync + 'static>;
+pub type StreamEndpoint =
+    Arc<dyn Fn(ToolInput) -> Result<StreamToolOutput, ToolsNodeError> + Send + Sync + 'static>;
+pub type EnhancedInvokableEndpoint = Arc<
+    dyn Fn(ToolInput) -> Result<EnhancedInvokableToolOutput, ToolsNodeError>
+        + Send
+        + Sync
+        + 'static,
+>;
+pub type EnhancedStreamEndpoint = Arc<
+    dyn Fn(ToolInput) -> Result<EnhancedStreamToolOutput, ToolsNodeError> + Send + Sync + 'static,
+>;
 
 struct ToolsTuple {
     indexes: HashMap<String, usize>,
@@ -55,14 +64,15 @@ struct ToolsTuple {
     invokable_endpoints: Vec<Option<InvokableEndpoint>>,
 }
 
-fn wrap_invokable_tool<T: InvokableTool + 'static>(
-    tool: Arc<T>,
-) -> InvokableEndpoint {
+fn wrap_invokable_tool<T: InvokableTool + 'static>(tool: Arc<T>) -> InvokableEndpoint {
     Arc::new(move |input: ToolInput| {
         let result = futures::executor::block_on(tool.invoke(input.arguments));
         match result {
             Ok(s) => Ok(ToolOutput { result: s }),
-            Err(e) => Err(ToolsNodeError::Execution { name: input.name, error: e.to_string() }),
+            Err(e) => Err(ToolsNodeError::Execution {
+                name: input.name,
+                error: e.to_string(),
+            }),
         }
     })
 }
@@ -78,7 +88,9 @@ fn invokable_to_streamable(ep: InvokableEndpoint) -> StreamEndpoint {
     })
 }
 
-fn conv_tools<T: BaseTool + InvokableTool + 'static>(tools: &[Arc<T>]) -> Result<ToolsTuple, ToolsNodeError> {
+fn conv_tools<T: BaseTool + InvokableTool + 'static>(
+    tools: &[Arc<T>],
+) -> Result<ToolsTuple, ToolsNodeError> {
     let n = tools.len();
     let mut tuple = ToolsTuple {
         indexes: HashMap::with_capacity(n),
@@ -100,9 +112,11 @@ fn conv_tools<T: BaseTool + InvokableTool + 'static>(tools: &[Arc<T>]) -> Result
 
 pub struct ToolsNodeConfig<T: BaseTool + InvokableTool + 'static> {
     pub tools: Vec<Arc<T>>,
-    pub unknown_tool_handler: Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
+    pub unknown_tool_handler:
+        Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
     pub execute_sequentially: bool,
-    pub tool_arguments_handler: Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
+    pub tool_arguments_handler:
+        Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
 }
 
 impl<T: BaseTool + InvokableTool + 'static> Default for ToolsNodeConfig<T> {
@@ -118,9 +132,11 @@ impl<T: BaseTool + InvokableTool + 'static> Default for ToolsNodeConfig<T> {
 
 pub struct ToolsNode {
     tuple: ToolsTuple,
-    unknown_tool_handler: Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
+    unknown_tool_handler:
+        Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
     execute_sequentially: bool,
-    tool_arguments_handler: Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
+    tool_arguments_handler:
+        Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
 }
 
 impl<T: BaseTool + InvokableTool + 'static> ToolsNodeConfig<T> {
@@ -130,7 +146,9 @@ impl<T: BaseTool + InvokableTool + 'static> ToolsNodeConfig<T> {
 }
 
 impl ToolsNode {
-    pub fn new<T: BaseTool + InvokableTool + 'static>(config: ToolsNodeConfig<T>) -> Result<Self, ToolsNodeError> {
+    pub fn new<T: BaseTool + InvokableTool + 'static>(
+        config: ToolsNodeConfig<T>,
+    ) -> Result<Self, ToolsNodeError> {
         let tuple = conv_tools(&config.tools)?;
         Ok(Self {
             tuple,
@@ -151,14 +169,20 @@ impl Runnable<Message, Vec<Message>> for ToolsNode {
 
         Box::pin(async move {
             if input.role != RoleType::Assistant {
-                return Err(RunnableError::Invoke(format!("expected Assistant role, got {:?}", input.role)));
+                return Err(RunnableError::Invoke(format!(
+                    "expected Assistant role, got {:?}",
+                    input.role
+                )));
             }
 
-            let tool_calls = input.tool_calls.as_ref()
-                .ok_or_else(|| RunnableError::InvalidInput("no tool_calls in message".to_string()))?;
+            let tool_calls = input.tool_calls.as_ref().ok_or_else(|| {
+                RunnableError::InvalidInput("no tool_calls in message".to_string())
+            })?;
 
             if tool_calls.is_empty() {
-                return Err(RunnableError::InvalidInput("no tool calls found".to_string()));
+                return Err(RunnableError::InvalidInput(
+                    "no tool calls found".to_string(),
+                ));
             }
 
             let n = tool_calls.len();
@@ -190,7 +214,15 @@ impl Runnable<Message, Vec<Message>> for ToolsNode {
                     let unknown_clone = unknown_handler.clone();
                     let args_handler_clone = args_handler.clone();
                     handles.push(tokio::task::spawn_blocking(move || {
-                        run_single_tool_owned(name, call_id, args, idx_clone, eps_clone, unknown_clone, args_handler_clone)
+                        run_single_tool_owned(
+                            name,
+                            call_id,
+                            args,
+                            idx_clone,
+                            eps_clone,
+                            unknown_clone,
+                            args_handler_clone,
+                        )
                     }));
                 }
 
@@ -204,12 +236,12 @@ impl Runnable<Message, Vec<Message>> for ToolsNode {
             let mut messages = Vec::with_capacity(n);
             for (i, tc) in tool_calls.iter().enumerate() {
                 if let Some(ref e) = errors[i] {
-                    return Err(RunnableError::Invoke(format!("tool {} error: {}", tc.function.name, e)));
+                    return Err(RunnableError::Invoke(format!(
+                        "tool {} error: {}",
+                        tc.function.name, e
+                    )));
                 }
-                let mut msg = Message::tool(
-                    outputs[i].clone().unwrap_or_default(),
-                    tc.id.clone(),
-                );
+                let mut msg = Message::tool(outputs[i].clone().unwrap_or_default(), tc.id.clone());
                 msg.name = Some(tc.function.name.clone());
                 messages.push(msg);
             }
@@ -229,16 +261,18 @@ fn run_single_tool_owned(
     args: String,
     indexes: HashMap<String, usize>,
     inv_endpoints: Vec<Option<InvokableEndpoint>>,
-    unknown_handler: Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
-    args_handler: Option<Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
+    unknown_handler: Option<
+        Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>,
+    >,
+    args_handler: Option<
+        Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>,
+    >,
 ) -> (Option<String>, Option<String>) {
     let processed_args = match args_handler {
-        Some(h) => {
-            match h(name.clone(), args) {
-                Ok(a) => a,
-                Err(e) => return (None, Some(e)),
-            }
-        }
+        Some(h) => match h(name.clone(), args) {
+            Ok(a) => a,
+            Err(e) => return (None, Some(e)),
+        },
         None => args,
     };
 
@@ -254,7 +288,10 @@ fn run_single_tool_owned(
                 Err(e) => (None, Some(e.to_string())),
             }
         } else {
-            (None, Some(format!("tool {} has no invokable endpoint", name)))
+            (
+                None,
+                Some(format!("tool {} has no invokable endpoint", name)),
+            )
         }
     } else if let Some(h) = unknown_handler {
         match h(name, processed_args) {
@@ -272,16 +309,18 @@ fn run_single_tool(
     args: &str,
     indexes: &HashMap<String, usize>,
     inv_endpoints: &[Option<InvokableEndpoint>],
-    unknown_handler: Option<&Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
-    args_handler: Option<&Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>>,
+    unknown_handler: Option<
+        &Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>,
+    >,
+    args_handler: Option<
+        &Arc<dyn Fn(String, String) -> Result<String, String> + Send + Sync + 'static>,
+    >,
 ) -> (Option<String>, Option<String>) {
     let processed_args = match args_handler {
-        Some(h) => {
-            match h(name.to_string(), args.to_string()) {
-                Ok(a) => a,
-                Err(e) => return (None, Some(e)),
-            }
-        }
+        Some(h) => match h(name.to_string(), args.to_string()) {
+            Ok(a) => a,
+            Err(e) => return (None, Some(e)),
+        },
         None => args.to_string(),
     };
 
@@ -297,7 +336,10 @@ fn run_single_tool(
                 Err(e) => (None, Some(e.to_string())),
             }
         } else {
-            (None, Some(format!("tool {} has no invokable endpoint", name)))
+            (
+                None,
+                Some(format!("tool {} has no invokable endpoint", name)),
+            )
         }
     } else if let Some(h) = unknown_handler {
         match h(name.to_string(), processed_args) {

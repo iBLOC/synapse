@@ -1,10 +1,10 @@
-use std::sync::Arc;
 use async_trait::async_trait;
+use std::sync::Arc;
 use synapse::components::tool::{BaseTool, InvokableTool, ToolError};
-use synapse::schema::{Message, RoleType, ToolCall, FunctionCall, ToolInfo};
-use synapse::compose::tool_node::{ToolsNode, ToolsNodeConfig};
-use synapse::compose::runnable::Runnable;
 use synapse::compose::runnable::Context;
+use synapse::compose::runnable::Runnable;
+use synapse::compose::tool_node::{ToolsNode, ToolsNodeConfig};
+use synapse::schema::{FunctionCall, Message, RoleType, ToolCall, ToolInfo};
 
 struct TestTool {
     name: String,
@@ -13,7 +13,10 @@ struct TestTool {
 
 impl TestTool {
     fn new(name: &str, result: &str) -> Arc<Self> {
-        Arc::new(Self { name: name.to_string(), result: result.to_string() })
+        Arc::new(Self {
+            name: name.to_string(),
+            result: result.to_string(),
+        })
     }
 }
 

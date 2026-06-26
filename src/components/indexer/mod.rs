@@ -1,5 +1,5 @@
-use async_trait::async_trait;
 use crate::components::retriever::Document;
+use async_trait::async_trait;
 
 pub type IndexerResult<T> = Result<T, IndexerError>;
 
@@ -16,11 +16,11 @@ pub enum IndexerError {
 #[async_trait]
 pub trait Indexer: Send + Sync {
     async fn index(&self, documents: Vec<Document>) -> IndexerResult<()>;
-    
+
     async fn index_from_text(&self, texts: Vec<String>) -> IndexerResult<()>;
-    
+
     async fn delete(&self, doc_ids: Vec<String>) -> IndexerResult<()>;
-    
+
     async fn flush(&self) -> IndexerResult<()>;
 }
 

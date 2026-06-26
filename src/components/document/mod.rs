@@ -22,9 +22,9 @@ pub struct ParsedDocument {
 #[async_trait]
 pub trait DocumentParser: Send + Sync {
     fn supported_mime_types(&self) -> Vec<&'static str>;
-    
+
     async fn parse(&self, content: &[u8], mime_type: &str) -> DocumentResult<ParsedDocument>;
-    
+
     fn can_parse(&self, mime_type: &str) -> bool {
         self.supported_mime_types().contains(&mime_type)
     }
@@ -39,7 +39,11 @@ pub struct Document {
 }
 
 impl Document {
-    pub fn new(id: impl Into<String>, content: impl Into<String>, mime_type: impl Into<String>) -> Self {
+    pub fn new(
+        id: impl Into<String>,
+        content: impl Into<String>,
+        mime_type: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             content: content.into(),
@@ -47,7 +51,7 @@ impl Document {
             metadata: HashMap::new(),
         }
     }
-    
+
     pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.metadata.insert(key.into(), value);
         self
@@ -67,15 +71,15 @@ impl DocumentParser for TextParser {
     fn supported_mime_types(&self) -> Vec<&'static str> {
         vec!["text/plain", "text/markdown", "text/html"]
     }
-    
+
     async fn parse(&self, content: &[u8], mime_type: &str) -> DocumentResult<ParsedDocument> {
         if !self.can_parse(mime_type) {
             return Err(DocumentError::UnsupportedFormat(mime_type.to_string()));
         }
-        
-        let content = String::from_utf8(content.to_vec())
-            .map_err(|e| DocumentError::Parse(e.to_string()))?;
-        
+
+        let content =
+            String::from_utf8(content.to_vec()).map_err(|e| DocumentError::Parse(e.to_string()))?;
+
         Ok(ParsedDocument {
             content,
             metadata: HashMap::new(),
@@ -102,21 +106,20 @@ impl DocumentParser for JsonParser {
     fn supported_mime_types(&self) -> Vec<&'static str> {
         vec!["application/json"]
     }
-    
+
     async fn parse(&self, content: &[u8], mime_type: &str) -> DocumentResult<ParsedDocument> {
         if !self.can_parse(mime_type) {
             return Err(DocumentError::UnsupportedFormat(mime_type.to_string()));
         }
-        
-        let content = String::from_utf8(content.to_vec())
-            .map_err(|e| DocumentError::Parse(e.to_string()))?;
-        
-        let json: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| DocumentError::Parse(e.to_string()))?;
-        
-        let content = serde_json::to_string(&json)
-            .unwrap_or(content);
-        
+
+        let content =
+            String::from_utf8(content.to_vec()).map_err(|e| DocumentError::Parse(e.to_string()))?;
+
+        let json: serde_json::Value =
+            serde_json::from_str(&content).map_err(|e| DocumentError::Parse(e.to_string()))?;
+
+        let content = serde_json::to_string(&json).unwrap_or(content);
+
         Ok(ParsedDocument {
             content,
             metadata: HashMap::new(),

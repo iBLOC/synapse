@@ -96,7 +96,8 @@ impl dyn HttpClient {
         R: serde::de::DeserializeOwned,
     {
         let json = serde_json::to_vec(body).map_err(|e| HttpError::Request(e.to_string()))?;
-        let mut headers: Vec<(String, String)> = vec![("Content-Type".into(), "application/json".into())];
+        let mut headers: Vec<(String, String)> =
+            vec![("Content-Type".into(), "application/json".into())];
         for (k, v) in extra_headers {
             headers.push((k.to_string(), v.to_string()));
         }

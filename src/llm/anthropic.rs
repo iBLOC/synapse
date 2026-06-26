@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use crate::transport::HttpClient;
+use std::sync::Arc;
 
 pub struct AnthropicClient {
     _http: Arc<dyn HttpClient>,

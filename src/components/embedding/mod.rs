@@ -15,6 +15,6 @@ pub enum EmbeddingError {
 #[async_trait]
 pub trait Embedding: Send + Sync {
     async fn embed(&self, texts: Vec<String>) -> EmbeddingResult<Vec<Vec<f32>>>;
-    
+
     fn dimensions(&self) -> usize;
 }

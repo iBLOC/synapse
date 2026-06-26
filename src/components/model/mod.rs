@@ -1,8 +1,8 @@
-use tokio::sync::mpsc;
+use async_trait::async_trait;
 use futures::stream::Stream;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use async_trait::async_trait;
+use tokio::sync::mpsc;
 
 pub type ModelResult<T> = Result<T, ModelError>;
 
@@ -77,11 +77,13 @@ impl StreamReader {
         let reader = StreamReader { receiver: rx };
         (writer, reader)
     }
-    
-    pub fn from_receiver(receiver: mpsc::Receiver<Result<crate::schema::Message, ModelError>>) -> Self {
+
+    pub fn from_receiver(
+        receiver: mpsc::Receiver<Result<crate::schema::Message, ModelError>>,
+    ) -> Self {
         Self { receiver }
     }
-    
+
     pub async fn next(&mut self) -> Option<Result<crate::schema::Message, ModelError>> {
         self.receiver.recv().await
     }
@@ -130,9 +132,10 @@ impl Clone for StreamWriter {
     }
 }
 
-pub type BoxStreamReader = Pin<Box<dyn Stream<Item = Result<crate::schema::Message, ModelError>> + Send>>;
+pub type BoxStreamReader =
+    Pin<Box<dyn Stream<Item = Result<crate::schema::Message, ModelError>> + Send>>;
 
 pub mod openai;
 pub use openai::OpenAIModel;
 #[cfg(not(target_arch = "wasm32"))]
-pub use openai::{OpenAIChatModel, OpenAIConfig, OpenAIChatModelBuilder};
+pub use openai::{OpenAIChatModel, OpenAIChatModelBuilder, OpenAIConfig};

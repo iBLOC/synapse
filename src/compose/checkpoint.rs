@@ -1,13 +1,13 @@
 //! Graph checkpoint persistence for state recovery.
-//! 
+//!
 //! Enables saving and restoring graph execution state for interruption
 //! and resumption workflows.
 
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use async_trait::async_trait;
 use tokio::sync::Mutex as TokioMutex;
-use serde::{Serialize, Deserialize};
 
 pub type CheckpointResult<T> = Result<T, CheckpointError>;
 
@@ -50,16 +50,17 @@ impl Default for JsonSerializer {
 
 impl Serializer for JsonSerializer {
     fn serialize(&self, value: &dyn std::any::Any) -> CheckpointResult<Vec<u8>> {
-        let json = value.downcast_ref::<serde_json::Value>()
+        let json = value
+            .downcast_ref::<serde_json::Value>()
             .ok_or_else(|| CheckpointError::Error("value is not JSON".to_string()))?;
-        serde_json::to_vec(json)
-            .map_err(|e| CheckpointError::SerializationError(e.to_string()))
+        serde_json::to_vec(json).map_err(|e| CheckpointError::SerializationError(e.to_string()))
     }
-    
+
     fn deserialize(&self, data: &[u8], value: &mut dyn std::any::Any) -> CheckpointResult<()> {
         let json: serde_json::Value = serde_json::from_slice(data)
             .map_err(|e| CheckpointError::SerializationError(e.to_string()))?;
-        let target = value.downcast_mut::<serde_json::Value>()
+        let target = value
+            .downcast_mut::<serde_json::Value>()
             .ok_or_else(|| CheckpointError::Error("target is not JSON".to_string()))?;
         *target = json;
         Ok(())
@@ -112,12 +113,12 @@ impl CheckPoint {
             interrupt_id2_state: HashMap::new(),
         }
     }
-    
+
     pub fn with_state(mut self, state: serde_json::Value) -> Self {
         self.state = Some(state);
         self
     }
-    
+
     pub fn add_channel(mut self, name: impl Into<String>, values: Vec<serde_json::Value>) -> Self {
         self.channels.insert(name.into(), ChannelData { values });
         self
@@ -130,13 +131,17 @@ impl Default for CheckPoint {
     }
 }
 
-pub struct CheckPointer<S: Send + Sync + serde::Serialize + serde::de::DeserializeOwned + Clone + 'static> {
+pub struct CheckPointer<
+    S: Send + Sync + serde::Serialize + serde::de::DeserializeOwned + Clone + 'static,
+> {
     store: Arc<dyn CheckPointStore>,
     serializer: Arc<dyn Serializer>,
     _phantom: std::marker::PhantomData<S>,
 }
 
-impl<S: Send + Sync + serde::Serialize + serde::de::DeserializeOwned + Clone + 'static> CheckPointer<S> {
+impl<S: Send + Sync + serde::Serialize + serde::de::DeserializeOwned + Clone + 'static>
+    CheckPointer<S>
+{
     pub fn new(store: Arc<dyn CheckPointStore>) -> Self {
         Self {
             store,
@@ -144,18 +149,18 @@ impl<S: Send + Sync + serde::Serialize + serde::de::DeserializeOwned + Clone + '
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     pub fn with_serializer(mut self, serializer: Arc<dyn Serializer>) -> Self {
         self.serializer = serializer;
         self
     }
-    
+
     pub async fn save(&self, id: &str, state: &S) -> CheckpointResult<()> {
         let bytes = serde_json::to_vec(state)
             .map_err(|e| CheckpointError::SerializationError(e.to_string()))?;
         self.store.set(id, bytes).await
     }
-    
+
     pub async fn load(&self, id: &str) -> CheckpointResult<Option<S>> {
         let bytes = self.store.get(id).await?;
         match bytes {
@@ -167,7 +172,7 @@ impl<S: Send + Sync + serde::Serialize + serde::de::DeserializeOwned + Clone + '
             None => Ok(None),
         }
     }
-    
+
     pub async fn delete(&self, id: &str) -> CheckpointResult<()> {
         self.store.delete(id).await
     }
@@ -197,19 +202,19 @@ impl CheckPointStore for MemoryCheckPointStore {
         let data = self.data.lock().await;
         Ok(data.get(id).cloned())
     }
-    
+
     async fn set(&self, id: &str, data: Vec<u8>) -> CheckpointResult<()> {
         let mut store = self.data.lock().await;
         store.insert(id.to_string(), data);
         Ok(())
     }
-    
+
     async fn delete(&self, id: &str) -> CheckpointResult<()> {
         let mut store = self.data.lock().await;
         store.remove(id);
         Ok(())
     }
-    
+
     async fn list(&self) -> CheckpointResult<Vec<String>> {
         let data = self.data.lock().await;
         Ok(data.keys().cloned().collect())
@@ -241,7 +246,7 @@ impl CheckPointStore for FileCheckPointStore {
             .map_err(|e| CheckpointError::Error(e.to_string()))
             .map(Some)
     }
-    
+
     async fn set(&self, id: &str, data: Vec<u8>) -> CheckpointResult<()> {
         tokio::fs::create_dir_all(&self.dir)
             .await
@@ -251,7 +256,7 @@ impl CheckPointStore for FileCheckPointStore {
             .await
             .map_err(|e| CheckpointError::Error(e.to_string()))
     }
-    
+
     async fn delete(&self, id: &str) -> CheckpointResult<()> {
         let path = self.dir.join(format!("{}.json", id));
         if path.exists() {
@@ -261,13 +266,17 @@ impl CheckPointStore for FileCheckPointStore {
         }
         Ok(())
     }
-    
+
     async fn list(&self) -> CheckpointResult<Vec<String>> {
         let mut entries = tokio::fs::read_dir(&self.dir)
             .await
             .map_err(|e| CheckpointError::Error(e.to_string()))?;
         let mut ids = Vec::new();
-        while let Some(entry) = entries.next_entry().await.map_err(|e| CheckpointError::Error(e.to_string()))? {
+        while let Some(entry) = entries
+            .next_entry()
+            .await
+            .map_err(|e| CheckpointError::Error(e.to_string()))?
+        {
             if let Some(name) = entry.file_name().to_str() {
                 if name.ends_with(".json") {
                     ids.push(name.trim_end_matches(".json").to_string());
@@ -278,22 +287,18 @@ impl CheckPointStore for FileCheckPointStore {
     }
 }
 
-pub fn migrate_checkpoint_state<F>(
-    data: Vec<u8>,
-    migrate: F,
-) -> CheckpointResult<Vec<u8>>
+pub fn migrate_checkpoint_state<F>(data: Vec<u8>, migrate: F) -> CheckpointResult<Vec<u8>>
 where
     F: Fn(serde_json::Value) -> CheckpointResult<serde_json::Value>,
 {
     let mut checkpoint: CheckPoint = serde_json::from_slice(&data)
         .map_err(|e| CheckpointError::SerializationError(e.to_string()))?;
-    
+
     if let Some(ref mut state) = checkpoint.state {
         *state = migrate(state.clone())?;
     }
-    
-    serde_json::to_vec(&checkpoint)
-        .map_err(|e| CheckpointError::SerializationError(e.to_string()))
+
+    serde_json::to_vec(&checkpoint).map_err(|e| CheckpointError::SerializationError(e.to_string()))
 }
 
 #[cfg(test)]
@@ -308,12 +313,12 @@ mod tests {
     #[tokio::test]
     async fn test_memory_store() {
         let store = Arc::new(MemoryCheckPointStore::new());
-        
+
         store.set("key1", b"data".to_vec()).await.unwrap();
-        
+
         let result = store.get("key1").await.unwrap();
         assert_eq!(result, Some(b"data".to_vec()));
-        
+
         store.delete("key1").await.unwrap();
         assert!(store.get("key1").await.unwrap().is_none());
     }
@@ -322,10 +327,10 @@ mod tests {
     async fn test_checkpointer() {
         let store = Arc::new(MemoryCheckPointStore::new());
         let pointer = CheckPointer::<TestState>::new(store.clone());
-        
+
         let state = TestState { value: 42 };
         pointer.save("test", &state).await.unwrap();
-        
+
         let loaded = pointer.load("test").await.unwrap();
         assert_eq!(loaded, Some(TestState { value: 42 }));
     }
@@ -335,7 +340,7 @@ mod tests {
         let cp = CheckPoint::new()
             .with_state(serde_json::json!({"counter": 10}))
             .add_channel("output", vec![serde_json::json!("result")]);
-        
+
         assert!(cp.state.is_some());
         assert_eq!(cp.channels.len(), 1);
     }

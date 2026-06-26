@@ -1,17 +1,18 @@
-pub mod stream;
 pub mod context;
 pub mod error;
 pub mod lambda;
+pub mod stream;
 
-pub use stream::{StreamReader, StreamWriter, channel, pipe, from_array, merge, StreamError};
 pub use context::{Context, Handler, RunInfo};
 pub use error::{RunnableError, RunnableResult};
-pub use lambda::{Lambda, invokable_lambda};
+pub use lambda::{invokable_lambda, Lambda};
+pub use stream::{channel, from_array, merge, pipe, StreamError, StreamReader, StreamWriter};
 
 use std::pin::Pin;
 use std::sync::Arc;
 
-pub type RunnableFuture<O> = Pin<Box<dyn std::future::Future<Output = RunnableResult<O>> + Send + 'static>>;
+pub type RunnableFuture<O> =
+    Pin<Box<dyn std::future::Future<Output = RunnableResult<O>> + Send + 'static>>;
 
 pub trait Runnable<I, O>: Send + Sync
 where
@@ -20,25 +21,33 @@ where
 {
     fn invoke(&self, ctx: Context, input: I) -> RunnableFuture<O> {
         Box::pin(async move {
-            Err(RunnableError::NotImplemented("invoke not implemented".into()))
+            Err(RunnableError::NotImplemented(
+                "invoke not implemented".into(),
+            ))
         })
     }
 
     fn stream(&self, _ctx: Context, _input: I) -> RunnableFuture<StreamReader<O>> {
         Box::pin(async move {
-            Err(RunnableError::NotImplemented("stream not implemented".into()))
+            Err(RunnableError::NotImplemented(
+                "stream not implemented".into(),
+            ))
         })
     }
 
     fn collect(&self, _ctx: Context, _input: StreamReader<I>) -> RunnableFuture<O> {
         Box::pin(async move {
-            Err(RunnableError::NotImplemented("collect not implemented".into()))
+            Err(RunnableError::NotImplemented(
+                "collect not implemented".into(),
+            ))
         })
     }
 
     fn transform(&self, _ctx: Context, _input: StreamReader<I>) -> RunnableFuture<StreamReader<O>> {
         Box::pin(async move {
-            Err(RunnableError::NotImplemented("transform not implemented".into()))
+            Err(RunnableError::NotImplemented(
+                "transform not implemented".into(),
+            ))
         })
     }
 

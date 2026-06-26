@@ -1,7 +1,7 @@
 //! Stream types for compose module.
 
-use tokio::sync::mpsc;
 use std::marker::PhantomData;
+use tokio::sync::mpsc;
 
 /// Stream error type
 pub type StreamError = Box<dyn std::error::Error + Send + Sync + 'static>;
@@ -15,7 +15,10 @@ pub struct StreamReader<T> {
 impl<T> StreamReader<T> {
     /// Create from a receiver.
     pub fn from_receiver(rx: mpsc::Receiver<Result<T, StreamError>>) -> Self {
-        Self { rx, _phantom: PhantomData }
+        Self {
+            rx,
+            _phantom: PhantomData,
+        }
     }
 
     /// Receive the next item from the stream.
@@ -48,7 +51,10 @@ pub struct StreamWriter<T> {
 impl<T> StreamWriter<T> {
     /// Create from a sender.
     pub fn from_sender(tx: mpsc::Sender<Result<T, StreamError>>) -> Self {
-        Self { tx, _phantom: PhantomData }
+        Self {
+            tx,
+            _phantom: PhantomData,
+        }
     }
 
     /// Send an item to the stream.
@@ -70,7 +76,10 @@ pub fn pipe<T>(cap: usize) -> (StreamWriter<T>, StreamReader<T>) {
 /// Create a channel pair for streaming.
 pub fn channel<T>(cap: usize) -> (StreamWriter<T>, StreamReader<T>) {
     let (tx, rx) = mpsc::channel(cap);
-    (StreamWriter::from_sender(tx), StreamReader::from_receiver(rx))
+    (
+        StreamWriter::from_sender(tx),
+        StreamReader::from_receiver(rx),
+    )
 }
 
 /// Create a stream reader that emits all items from an array and then closes.

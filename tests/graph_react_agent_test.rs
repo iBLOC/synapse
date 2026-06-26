@@ -1,10 +1,10 @@
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use async_trait::async_trait;
-use synapse::components::model::{BaseChatModel, GenerateOptions, ModelError, ModelResult};
-use synapse::schema::{Message, RoleType, Content};
-use synapse::adk::agent::{Agent, AgentInput};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use synapse::adk::agent::react::GraphReActAgent;
+use synapse::adk::agent::{Agent, AgentInput};
+use synapse::components::model::{BaseChatModel, GenerateOptions, ModelError, ModelResult};
+use synapse::schema::{Content, Message, RoleType};
 
 struct MockChatModel {
     responses: Vec<Message>,
@@ -13,7 +13,7 @@ struct MockChatModel {
 
 impl MockChatModel {
     fn new(responses: Vec<Message>) -> Arc<Self> {
-        Arc::new(Self { 
+        Arc::new(Self {
             responses,
             index: AtomicUsize::new(0),
         })
@@ -22,7 +22,11 @@ impl MockChatModel {
 
 #[async_trait]
 impl BaseChatModel for MockChatModel {
-    async fn generate(&self, _messages: Vec<Message>, _options: GenerateOptions) -> ModelResult<Message> {
+    async fn generate(
+        &self,
+        _messages: Vec<Message>,
+        _options: GenerateOptions,
+    ) -> ModelResult<Message> {
         let idx = self.index.fetch_add(1, Ordering::SeqCst);
         if idx < self.responses.len() {
             Ok(self.responses[idx].clone())
@@ -31,16 +35,18 @@ impl BaseChatModel for MockChatModel {
         }
     }
 
-    async fn stream(&self, _messages: Vec<Message>, _options: GenerateOptions) -> ModelResult<synapse::components::model::StreamReader> {
+    async fn stream(
+        &self,
+        _messages: Vec<Message>,
+        _options: GenerateOptions,
+    ) -> ModelResult<synapse::components::model::StreamReader> {
         Err(ModelError::Api("Streaming not implemented".to_string()))
     }
 }
 
 #[tokio::test]
 async fn test_graph_react_agent_builder() {
-    let model = MockChatModel::new(vec![
-        Message::assistant("Hello! How can I help you?"),
-    ]);
+    let model = MockChatModel::new(vec![Message::assistant("Hello! How can I help you?")]);
 
     let agent = GraphReActAgent::builder()
         .name("TestAgent")
@@ -55,7 +61,7 @@ async fn test_graph_react_agent_builder() {
 #[tokio::test]
 async fn test_graph_react_agent_name_and_description() {
     let model = MockChatModel::new(vec![Message::assistant("Hi")]);
-    
+
     let agent = GraphReActAgent::builder()
         .name("MyAgent")
         .description("My test agent description")

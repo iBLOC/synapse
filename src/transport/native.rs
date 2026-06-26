@@ -8,12 +8,16 @@ pub struct ReqwestHttpClient {
 
 impl ReqwestHttpClient {
     pub fn new() -> Self {
-        Self { client: Client::new() }
+        Self {
+            client: Client::new(),
+        }
     }
 }
 
 impl Default for ReqwestHttpClient {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[async_trait]
@@ -31,15 +35,25 @@ impl HttpClient for ReqwestHttpClient {
         if let Some(body) = req.body {
             builder = builder.body(body);
         }
-        let resp = builder.send().await
+        let resp = builder
+            .send()
+            .await
             .map_err(|e| HttpError::Request(e.to_string()))?;
         let status = resp.status().as_u16();
-        let headers = resp.headers().iter()
+        let headers = resp
+            .headers()
+            .iter()
             .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
             .collect();
-        let body = resp.bytes().await
+        let body = resp
+            .bytes()
+            .await
             .map_err(|e| HttpError::Response(e.to_string()))?
             .to_vec();
-        Ok(HttpResponse { status, headers, body })
+        Ok(HttpResponse {
+            status,
+            headers,
+            body,
+        })
     }
 }

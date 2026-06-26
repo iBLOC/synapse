@@ -1,19 +1,24 @@
+pub mod chain;
 pub mod channel;
 pub mod options;
 pub mod workflow;
-pub mod chain;
 
 #[cfg(test)]
 mod tests;
 
+use crate::runnable::{
+    Context, Runnable, RunnableError, RunnableFuture, RunnableResult, StreamReader,
+};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use crate::runnable::{Runnable, RunnableFuture, RunnableResult, RunnableError, Context, StreamReader};
 
 pub const START: &str = "start";
 pub const END: &str = "end";
 
-pub use options::{NodeTriggerMode, GraphCompileOptions, GraphCompileOption, WithMaxSteps, WithGraphName, WithTriggerMode};
+pub use options::{
+    GraphCompileOption, GraphCompileOptions, NodeTriggerMode, WithGraphName, WithMaxSteps,
+    WithTriggerMode,
+};
 
 #[derive(Clone)]
 pub struct GraphNode {
@@ -23,12 +28,23 @@ pub struct GraphNode {
 }
 
 impl GraphNode {
-    pub fn new(key: String, runnable: Arc<dyn Runnable<serde_json::Value, serde_json::Value>>) -> Self {
-        Self { name: runnable.name(), key, runnable: Some(runnable) }
+    pub fn new(
+        key: String,
+        runnable: Arc<dyn Runnable<serde_json::Value, serde_json::Value>>,
+    ) -> Self {
+        Self {
+            name: runnable.name(),
+            key,
+            runnable: Some(runnable),
+        }
     }
 
     fn new_sentinel(key: String) -> Self {
-        Self { name: key.clone(), key, runnable: None }
+        Self {
+            name: key.clone(),
+            key,
+            runnable: None,
+        }
     }
 }
 
@@ -57,10 +73,16 @@ impl<I, O> Graph<I, O> {
         }
     }
 
-    pub fn add_node(&mut self, key: impl Into<String>, runnable: Arc<dyn Runnable<serde_json::Value, serde_json::Value>>) -> &mut GraphNode {
+    pub fn add_node(
+        &mut self,
+        key: impl Into<String>,
+        runnable: Arc<dyn Runnable<serde_json::Value, serde_json::Value>>,
+    ) -> &mut GraphNode {
         let key_str = key.into();
         match self.nodes.entry(key_str.clone()) {
-            std::collections::hash_map::Entry::Vacant(e) => e.insert(GraphNode::new(key_str.clone(), runnable)),
+            std::collections::hash_map::Entry::Vacant(e) => {
+                e.insert(GraphNode::new(key_str.clone(), runnable))
+            }
             std::collections::hash_map::Entry::Occupied(e) => e.into_mut(),
         };
         self.nodes.get_mut(&key_str).unwrap()
@@ -69,25 +91,39 @@ impl<I, O> Graph<I, O> {
     pub fn add_edge(&mut self, from: impl Into<String>, to: impl Into<String>) -> &mut Self {
         let from = from.into();
         let to = to.into();
-        self.control_edges.entry(from.clone()).or_default().push(to.clone());
+        self.control_edges
+            .entry(from.clone())
+            .or_default()
+            .push(to.clone());
         self.data_edges.entry(from).or_default().push(to);
         self
     }
 
     pub fn add_lambda_node<F>(&mut self, name: &str, f: F) -> &mut Self
-    where F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static {
-        let lambda = SyncLambda { name: name.to_string(), f: Arc::new(f) };
+    where
+        F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static,
+    {
+        let lambda = SyncLambda {
+            name: name.to_string(),
+            f: Arc::new(f),
+        };
         let runnable: Arc<dyn Runnable<serde_json::Value, serde_json::Value>> = Arc::new(lambda);
         self.add_node(name, runnable);
         self
     }
 
     pub fn add_conditional_edge<F>(&mut self, from: &str, condition: F, to: &str) -> &mut Self
-    where F: Fn(&serde_json::Value) -> bool + Send + Sync + 'static {
+    where
+        F: Fn(&serde_json::Value) -> bool + Send + Sync + 'static,
+    {
         let to_owned = to.to_string();
         let branch = GraphBranch::new(
             move |_ctx: &Context, input: &serde_json::Value| {
-                Ok(if condition(input) { Some(to_owned.clone()) } else { None })
+                Ok(if condition(input) {
+                    Some(to_owned.clone())
+                } else {
+                    None
+                })
             },
             std::iter::once(to.to_string()).collect(),
         );
@@ -104,17 +140,20 @@ impl<I, O> Graph<I, O> {
         self.compile_with_options(GraphCompileOptions::default())
     }
 
-    pub fn compile_with_options(self, opts: GraphCompileOptions) -> Result<CompiledGraph<I, O>, RunnableError> {
+    pub fn compile_with_options(
+        self,
+        opts: GraphCompileOptions,
+    ) -> Result<CompiledGraph<I, O>, RunnableError> {
         if self.compiled {
             return Err(RunnableError::GraphCompiled);
         }
         let mut nodes = self.nodes;
-        nodes.entry(START.to_string()).or_insert_with(|| {
-            GraphNode::new_sentinel(START.to_string())
-        });
-        nodes.entry(END.to_string()).or_insert_with(|| {
-            GraphNode::new_sentinel(END.to_string())
-        });
+        nodes
+            .entry(START.to_string())
+            .or_insert_with(|| GraphNode::new_sentinel(START.to_string()));
+        nodes
+            .entry(END.to_string())
+            .or_insert_with(|| GraphNode::new_sentinel(END.to_string()));
         Ok(CompiledGraph {
             inner: Arc::new(CompiledGraphInner {
                 nodes,
@@ -152,15 +191,18 @@ pub struct CompiledGraph<I, O> {
     _output: std::marker::PhantomData<O>,
 }
 
-impl<I: Send + 'static + serde::Serialize, O: Send + 'static + serde::de::DeserializeOwned> CompiledGraph<I, O> {
+impl<I: Send + 'static + serde::Serialize, O: Send + 'static + serde::de::DeserializeOwned>
+    CompiledGraph<I, O>
+{
     pub async fn invoke(&self, ctx: Context, input: I) -> RunnableResult<O> {
-        let input_json = serde_json::to_value(&input)
-            .map_err(|e| RunnableError::InvalidInput(e.to_string()))?;
+        let input_json =
+            serde_json::to_value(&input).map_err(|e| RunnableError::InvalidInput(e.to_string()))?;
 
         let control_edges = self.inner.control_edges.clone();
         let channel: Arc<dyn channel::Channel> = match self.inner.run_type {
             NodeTriggerMode::AllPredecessor => {
-                let mut inverted: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+                let mut inverted: std::collections::HashMap<String, Vec<String>> =
+                    std::collections::HashMap::new();
                 for (src, targets) in &control_edges {
                     for tgt in targets {
                         inverted.entry(tgt.clone()).or_default().push(src.clone());
@@ -169,7 +211,8 @@ impl<I: Send + 'static + serde::Serialize, O: Send + 'static + serde::de::Deseri
                 Arc::new(channel::DagChannel::with_dependencies(inverted))
             }
             NodeTriggerMode::AnyPredecessor => {
-                let mut inverted: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+                let mut inverted: std::collections::HashMap<String, Vec<String>> =
+                    std::collections::HashMap::new();
                 for (src, targets) in &control_edges {
                     for tgt in targets {
                         inverted.entry(tgt.clone()).or_default().push(src.clone());
@@ -179,17 +222,18 @@ impl<I: Send + 'static + serde::Serialize, O: Send + 'static + serde::de::Deseri
             }
         };
 
-        channel.report(START, input_json)
+        channel
+            .report(START, input_json)
             .map_err(|e| RunnableError::Invoke(e))?;
 
         execute_graph(&self.inner, &ctx, &channel).await?;
 
-        let output = channel.get(END)
+        let output = channel
+            .get(END)
             .map_err(|e| RunnableError::Invoke(e))?
             .ok_or_else(|| RunnableError::Invoke("no output from graph".to_string()))?;
 
-        serde_json::from_value(output)
-            .map_err(|e| RunnableError::Invoke(e.to_string()))
+        serde_json::from_value(output).map_err(|e| RunnableError::Invoke(e.to_string()))
     }
 }
 
@@ -204,18 +248,25 @@ async fn execute_graph(
     loop {
         step += 1;
         if step > max_steps {
-            return Err(RunnableError::Invoke(format!("exceeded max steps {}", max_steps)));
+            return Err(RunnableError::Invoke(format!(
+                "exceeded max steps {}",
+                max_steps
+            )));
         }
 
         let ready = find_ready_nodes(inner, channel);
 
         if ready.is_empty() {
-            let end_deps: Vec<String> = inner.control_edges.iter()
+            let end_deps: Vec<String> = inner
+                .control_edges
+                .iter()
                 .filter(|(_, targets)| targets.iter().any(|t| t == END))
                 .map(|(k, _)| k.clone())
                 .collect();
             let is_end_done = channel.done_nodes().contains(&END.to_string());
-            let is_end_ready = !is_end_done && (end_deps.is_empty() || end_deps.iter().all(|d| channel.done_nodes().contains(d)));
+            let is_end_ready = !is_end_done
+                && (end_deps.is_empty()
+                    || end_deps.iter().all(|d| channel.done_nodes().contains(d)));
             if is_end_ready {
                 execute_node(inner, ctx, channel, END).await?;
             }
@@ -224,15 +275,16 @@ async fn execute_graph(
             }
         }
 
-        let handles: Vec<_> = ready.into_iter().map(|key| {
-            let inner = inner.clone();
-            let ctx = ctx.clone();
-            let channel = channel.clone();
-            let key = key.clone();
-            tokio::spawn(async move {
-                execute_node(&inner, &ctx, &channel, &key).await
+        let handles: Vec<_> = ready
+            .into_iter()
+            .map(|key| {
+                let inner = inner.clone();
+                let ctx = ctx.clone();
+                let channel = channel.clone();
+                let key = key.clone();
+                tokio::spawn(async move { execute_node(&inner, &ctx, &channel, &key).await })
             })
-        }).collect();
+            .collect();
 
         for h in handles {
             h.await
@@ -242,7 +294,10 @@ async fn execute_graph(
     Ok(())
 }
 
-fn find_ready_nodes(inner: &CompiledGraphInner, channel: &Arc<dyn channel::Channel>) -> Vec<String> {
+fn find_ready_nodes(
+    inner: &CompiledGraphInner,
+    channel: &Arc<dyn channel::Channel>,
+) -> Vec<String> {
     let mut ready = Vec::new();
 
     for (key, _) in &inner.nodes {
@@ -253,8 +308,10 @@ fn find_ready_nodes(inner: &CompiledGraphInner, channel: &Arc<dyn channel::Chann
             continue;
         }
 
-        let deps: Vec<String> = inner.control_edges.iter()
-        .filter(|(_, targets)| targets.iter().any(|k| k == key))
+        let deps: Vec<String> = inner
+            .control_edges
+            .iter()
+            .filter(|(_, targets)| targets.iter().any(|k| k == key))
             .map(|(k, _)| k.clone())
             .collect();
 
@@ -291,24 +348,30 @@ async fn execute_node(
     };
 
     if key == START {
-        channel.mark_done(START)
+        channel
+            .mark_done(START)
             .map_err(|e| RunnableError::Invoke(e))?;
         return Ok(());
     }
 
     if key == END {
-        let preds: Vec<String> = inner.control_edges.iter()
+        let preds: Vec<String> = inner
+            .control_edges
+            .iter()
             .filter(|(_, targets)| targets.iter().any(|t| t == END))
             .map(|(k, _)| k.clone())
             .collect();
         if let Some(last) = preds.last() {
-            let output = channel.get(last)
+            let output = channel
+                .get(last)
                 .map_err(|e| RunnableError::Invoke(e))?
                 .unwrap_or(serde_json::Value::Null);
-            channel.report(END, output)
+            channel
+                .report(END, output)
                 .map_err(|e| RunnableError::Invoke(e))?;
         }
-        channel.mark_done(END)
+        channel
+            .mark_done(END)
             .map_err(|e| RunnableError::Invoke(e))?;
         return Ok(());
     }
@@ -318,13 +381,20 @@ async fn execute_node(
         None => return Ok(()),
     };
 
-    let source_keys: Vec<String> = inner.data_edges.iter()
+    let source_keys: Vec<String> = inner
+        .data_edges
+        .iter()
         .filter(|(_, targets)| targets.iter().any(|k| k == key))
         .map(|(k, _)| k.clone())
         .collect();
-    let source = if source_keys.is_empty() { START.to_string() } else { source_keys[0].clone() };
+    let source = if source_keys.is_empty() {
+        START.to_string()
+    } else {
+        source_keys[0].clone()
+    };
 
-    let input = channel.get(&source)
+    let input = channel
+        .get(&source)
         .map_err(|e| RunnableError::Invoke(e))?
         .unwrap_or(serde_json::Value::Null);
 
@@ -338,7 +408,8 @@ async fn execute_node(
                         if edge == &target {
                             continue;
                         }
-                        channel.report(edge, serde_json::Value::Null)
+                        channel
+                            .report(edge, serde_json::Value::Null)
                             .map_err(|e| RunnableError::Invoke(e))?;
                     }
                 }
@@ -346,9 +417,11 @@ async fn execute_node(
         }
     }
 
-    channel.report(key, output)
+    channel
+        .report(key, output)
         .map_err(|e| RunnableError::Invoke(e))?;
-    channel.mark_done(key)
+    channel
+        .mark_done(key)
         .map_err(|e| RunnableError::Invoke(e))?;
 
     Ok(())
@@ -356,14 +429,23 @@ async fn execute_node(
 
 #[derive(Clone)]
 pub struct GraphBranch {
-    condition: Arc<dyn Fn(&Context, &serde_json::Value) -> RunnableResult<Option<String>> + Send + Sync>,
+    condition:
+        Arc<dyn Fn(&Context, &serde_json::Value) -> RunnableResult<Option<String>> + Send + Sync>,
     end_nodes: HashSet<String>,
 }
 
 impl GraphBranch {
     pub fn new<C>(condition: C, end_nodes: HashSet<String>) -> Self
-    where C: Fn(&Context, &serde_json::Value) -> RunnableResult<Option<String>> + Send + Sync + 'static {
-        Self { condition: Arc::new(condition), end_nodes }
+    where
+        C: Fn(&Context, &serde_json::Value) -> RunnableResult<Option<String>>
+            + Send
+            + Sync
+            + 'static,
+    {
+        Self {
+            condition: Arc::new(condition),
+            end_nodes,
+        }
     }
 }
 
@@ -373,7 +455,8 @@ struct SyncLambda<F> {
 }
 
 impl<F> SyncLambda<F>
-where F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static,
+where
+    F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static,
 {
     fn invoke_sync(&self, input: serde_json::Value) -> RunnableResult<serde_json::Value> {
         (self.f)(input).map_err(|e| RunnableError::Invoke(e))
@@ -381,14 +464,19 @@ where F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Syn
 }
 
 impl<F> Runnable<serde_json::Value, serde_json::Value> for SyncLambda<F>
-where F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static,
+where
+    F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static,
 {
-    fn invoke(&self, _ctx: Context, input: serde_json::Value) -> crate::compose::runnable::RunnableFuture<serde_json::Value> {
+    fn invoke(
+        &self,
+        _ctx: Context,
+        input: serde_json::Value,
+    ) -> crate::compose::runnable::RunnableFuture<serde_json::Value> {
         let f = self.f.clone();
         Box::pin(async move {
-            tokio::task::spawn_blocking(move || {
-                (f)(input).map_err(|e| RunnableError::Invoke(e))
-            }).await.map_err(|e| RunnableError::Invoke(e.to_string()))?
+            tokio::task::spawn_blocking(move || (f)(input).map_err(|e| RunnableError::Invoke(e)))
+                .await
+                .map_err(|e| RunnableError::Invoke(e.to_string()))?
         })
     }
 
@@ -401,5 +489,5 @@ pub fn new_graph<I, O>() -> Graph<I, O> {
     Graph::new(NodeTriggerMode::default())
 }
 
-pub use workflow::Workflow;
 pub use chain::Chain;
+pub use workflow::Workflow;

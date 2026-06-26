@@ -1,9 +1,9 @@
-use std::sync::Arc;
+use crate::components::model::{BaseChatModel, GenerateOptions, ModelError, ModelResult};
+use crate::schema::Message;
+use crate::transport::HttpClient;
 use async_trait::async_trait;
 use serde_json::json;
-use crate::transport::HttpClient;
-use crate::components::model::{BaseChatModel, GenerateOptions, ModelResult, ModelError};
-use crate::schema::Message;
+use std::sync::Arc;
 
 pub struct OpenAIClient {
     http: Arc<dyn HttpClient>,
@@ -25,7 +25,11 @@ impl OpenAIClient {
         self
     }
 
-    fn build_request_body(&self, messages: &[Message], options: &GenerateOptions) -> serde_json::Value {
+    fn build_request_body(
+        &self,
+        messages: &[Message],
+        options: &GenerateOptions,
+    ) -> serde_json::Value {
         json!({
             "model": options.model.clone().unwrap_or_else(|| "gpt-3.5-turbo".to_string()),
             "messages": messages.iter().map(|m| json!({
@@ -41,15 +45,23 @@ impl OpenAIClient {
 
 #[async_trait]
 impl BaseChatModel for OpenAIClient {
-    async fn generate(&self, messages: Vec<Message>, options: GenerateOptions) -> ModelResult<Message> {
+    async fn generate(
+        &self,
+        messages: Vec<Message>,
+        options: GenerateOptions,
+    ) -> ModelResult<Message> {
         let body = self.build_request_body(&messages, &options);
         let url = format!("{}/chat/completions", self.base_url);
 
-        let resp: serde_json::Value = self.http.post_json_with_headers(
-            &url,
-            &[("Authorization", &format!("Bearer {}", self.api_key))],
-            &body,
-        ).await.map_err(|e| ModelError::Api(e.to_string()))?;
+        let resp: serde_json::Value = self
+            .http
+            .post_json_with_headers(
+                &url,
+                &[("Authorization", &format!("Bearer {}", self.api_key))],
+                &body,
+            )
+            .await
+            .map_err(|e| ModelError::Api(e.to_string()))?;
 
         let content = resp["choices"][0]["message"]["content"]
             .as_str()
@@ -58,7 +70,13 @@ impl BaseChatModel for OpenAIClient {
         Ok(Message::assistant(content))
     }
 
-    async fn stream(&self, _messages: Vec<Message>, _options: GenerateOptions) -> ModelResult<crate::components::model::StreamReader> {
-        Err(ModelError::Api("OpenAIClient::stream not yet implemented".to_string()))
+    async fn stream(
+        &self,
+        _messages: Vec<Message>,
+        _options: GenerateOptions,
+    ) -> ModelResult<crate::components::model::StreamReader> {
+        Err(ModelError::Api(
+            "OpenAIClient::stream not yet implemented".to_string(),
+        ))
     }
 }

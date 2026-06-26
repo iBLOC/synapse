@@ -1,6 +1,6 @@
 #![cfg(target_arch = "wasm32")]
 
-use synapse::transport::{DefaultHttpClient, HttpClient, HttpRequest, HttpMethod, HttpResponse};
+use synapse::transport::{DefaultHttpClient, HttpClient, HttpMethod, HttpRequest, HttpResponse};
 
 #[no_mangle]
 pub extern "C" fn test_wasi_http_client_construction() {

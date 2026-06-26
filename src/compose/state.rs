@@ -31,15 +31,15 @@ impl std::fmt::Debug for InternalState {
 }
 
 #[derive(Debug, Clone)]
-pub struct State<S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::DeserializeOwned> {
+pub struct State<S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::DeserializeOwned>
+{
     inner: Arc<InternalState>,
     _phantom: std::marker::PhantomData<S>,
 }
 
 impl<S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::DeserializeOwned> State<S> {
     pub fn new(state: S) -> Self {
-        let json = serde_json::to_value(&state)
-            .unwrap_or(serde_json::Value::Null);
+        let json = serde_json::to_value(&state).unwrap_or(serde_json::Value::Null);
         Self {
             inner: Arc::new(InternalState {
                 state: TokioMutex::new(json),
@@ -48,7 +48,7 @@ impl<S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::Deserializ
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     pub fn with_parent(parent: State<S>) -> Self {
         Self {
             inner: Arc::new(InternalState {
@@ -58,37 +58,35 @@ impl<S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::Deserializ
             _phantom: std::marker::PhantomData,
         }
     }
-    
+
     pub async fn get(&self) -> StateResult<S> {
         let state = self.inner.state.lock().await.clone();
-        serde_json::from_value(state)
-            .map_err(|e| StateError::Other(e.to_string()))
+        serde_json::from_value(state).map_err(|e| StateError::Other(e.to_string()))
     }
-    
+
     pub async fn set(&self, value: S) -> StateResult<()> {
-        let json = serde_json::to_value(&value)
-            .map_err(|e| StateError::Other(e.to_string()))?;
+        let json = serde_json::to_value(&value).map_err(|e| StateError::Other(e.to_string()))?;
         *self.inner.state.lock().await = json;
         Ok(())
     }
-    
+
     pub async fn update<F, Fut>(&self, f: F) -> StateResult<S>
     where
         F: FnOnce(S) -> Fut,
         Fut: std::future::Future<Output = S>,
     {
         let mut guard = self.inner.state.lock().await;
-        let current: S = serde_json::from_value(guard.clone())
-            .map_err(|e| StateError::Other(e.to_string()))?;
+        let current: S =
+            serde_json::from_value(guard.clone()).map_err(|e| StateError::Other(e.to_string()))?;
         let new_state = f(current).await;
-        *guard = serde_json::to_value(&new_state)
-            .map_err(|e| StateError::Other(e.to_string()))?;
+        *guard = serde_json::to_value(&new_state).map_err(|e| StateError::Other(e.to_string()))?;
         Ok(new_state)
     }
-    
+
     pub async fn get_with_parent(&self) -> StateResult<S> {
         if let Some(ref parent) = self.inner.parent {
-            let self_state: Result<S, _> = serde_json::from_value(self.inner.state.lock().await.clone());
+            let self_state: Result<S, _> =
+                serde_json::from_value(self.inner.state.lock().await.clone());
             if self_state.is_err() || self.inner.state.lock().await.is_null() {
                 let parent_json = parent.state.lock().await.clone();
                 return serde_json::from_value(parent_json)
@@ -109,8 +107,10 @@ impl StateManager {
             states: parking_lot::RwLock::new(HashMap::new()),
         }
     }
-    
-    pub fn register<S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::DeserializeOwned>(
+
+    pub fn register<
+        S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::DeserializeOwned,
+    >(
         &self,
         initial: S,
     ) {
@@ -118,13 +118,16 @@ impl StateManager {
         let any: Arc<dyn std::any::Any + Send + Sync> = state.inner.clone();
         self.states.write().insert(std::any::TypeId::of::<S>(), any);
     }
-    
-    pub fn get<S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::DeserializeOwned>(
+
+    pub fn get<
+        S: Clone + Send + Sync + 'static + serde::Serialize + serde::de::DeserializeOwned,
+    >(
         &self,
     ) -> Option<State<S>> {
         let states = self.states.read();
         states.get(&std::any::TypeId::of::<S>()).map(|any| {
-            let inner: Arc<InternalState> = any.downcast_ref::<Arc<InternalState>>().unwrap().clone();
+            let inner: Arc<InternalState> =
+                any.downcast_ref::<Arc<InternalState>>().unwrap().clone();
             State {
                 inner,
                 _phantom: std::marker::PhantomData,
@@ -155,15 +158,18 @@ mod tests {
             counter: 0,
             name: "test".to_string(),
         });
-        
+
         let retrieved = state.get().await.unwrap();
         assert_eq!(retrieved.counter, 0);
-        
-        state.set(TestState {
-            counter: 10,
-            name: "updated".to_string(),
-        }).await.unwrap();
-        
+
+        state
+            .set(TestState {
+                counter: 10,
+                name: "updated".to_string(),
+            })
+            .await
+            .unwrap();
+
         let updated = state.get().await.unwrap();
         assert_eq!(updated.counter, 10);
     }
@@ -171,10 +177,10 @@ mod tests {
     #[tokio::test]
     async fn test_state_update() {
         let state = State::new(0i32);
-        
+
         let result = state.update(|n| async move { n + 1 }).await.unwrap();
         assert_eq!(result, 1);
-        
+
         let current = state.get().await.unwrap();
         assert_eq!(current, 1);
     }

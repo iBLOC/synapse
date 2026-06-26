@@ -1,7 +1,7 @@
-use std::pin::Pin;
-use futures::stream::Stream;
 use async_trait::async_trait;
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
+use std::pin::Pin;
 
 pub type LLMResult<T> = Result<T, LLMError>;
 
@@ -36,19 +36,15 @@ impl std::error::Error for LLMError {}
 pub trait LLMProvider: Send + Sync {
     fn provider_name(&self) -> &str;
     fn model(&self) -> &str;
-    
-    async fn chat(
-        &self,
-        messages: Vec<Message>,
-        options: ChatOptions,
-    ) -> LLMResult<Message>;
-    
+
+    async fn chat(&self, messages: Vec<Message>, options: ChatOptions) -> LLMResult<Message>;
+
     async fn stream_chat(
         &self,
         messages: Vec<Message>,
         options: ChatOptions,
     ) -> LLMResult<Box<dyn Stream<Item = LLMResult<Message>> + Send>>;
-    
+
     async fn embeddings(&self, texts: Vec<String>) -> LLMResult<Vec<Vec<f32>>>;
 }
 
@@ -81,12 +77,9 @@ impl Content {
             parts: vec![],
         }
     }
-    
+
     pub fn from_parts(parts: Vec<ContentPart>) -> Self {
-        Self {
-            text: None,
-            parts,
-        }
+        Self { text: None, parts }
     }
 }
 
@@ -99,10 +92,20 @@ impl From<String> for Content {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ContentPart {
-    Text { text: String },
-    Image { url: String },
-    ToolUse { id: String, input: serde_json::Value },
-    ToolResult { tool_use_id: String, result: String },
+    Text {
+        text: String,
+    },
+    Image {
+        url: String,
+    },
+    ToolUse {
+        id: String,
+        input: serde_json::Value,
+    },
+    ToolResult {
+        tool_use_id: String,
+        result: String,
+    },
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -140,8 +143,8 @@ pub enum ResponseFormat {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub mod openai;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod anthropic;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod azure;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod openai;

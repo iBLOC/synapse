@@ -1,6 +1,8 @@
-use synapse::protocol::{A2AAdapter, AgentAdapter, AgentEndpoint, AgentRequest, AgentProtocol, ProtocolMessage};
-use synapse::llm::create_default_http_client;
 use std::sync::Arc;
+use synapse::llm::create_default_http_client;
+use synapse::protocol::{
+    A2AAdapter, AgentAdapter, AgentEndpoint, AgentProtocol, AgentRequest, ProtocolMessage,
+};
 
 #[tokio::test]
 async fn test_a2a_adapter_new_with_http() {
@@ -16,10 +18,12 @@ async fn test_a2a_adapter_new_default() {
 #[tokio::test]
 async fn test_a2a_send_task_with_mock() {
     let mut server = mockito::Server::new_async().await;
-    let mock = server.mock("POST", "/")
+    let mock = server
+        .mock("POST", "/")
         .with_status(200)
         .with_header("content-type", "application/json")
-        .with_body(r#"{
+        .with_body(
+            r#"{
             "jsonrpc": "2.0",
             "id": 1,
             "result": {
@@ -30,7 +34,8 @@ async fn test_a2a_send_task_with_mock() {
                 ],
                 "result": null
             }
-        }"#)
+        }"#,
+        )
         .create_async()
         .await;
 
@@ -54,7 +59,8 @@ async fn test_a2a_send_task_with_mock() {
         context: serde_json::Value::Null,
     };
 
-    let result: Result<synapse::protocol::AgentResponse, String> = adapter.send_task(&endpoint, &request).await;
+    let result: Result<synapse::protocol::AgentResponse, String> =
+        adapter.send_task(&endpoint, &request).await;
     assert!(result.is_ok(), "send_task failed: {:?}", result);
     let resp = result.unwrap();
     assert_eq!(resp.task_id, "task-1");
