@@ -72,3 +72,67 @@ async fn test_graph_react_agent_name_and_description() {
     assert_eq!(agent.name(), "MyAgent");
     assert_eq!(agent.description(), "My test agent description");
 }
+
+#[tokio::test]
+async fn test_graph_react_agent_run_no_tools() {
+    let model = MockChatModel::new(vec![Message::assistant("Hello back!")]);
+
+    let agent = GraphReActAgent::builder()
+        .with_model(model)
+        .max_steps(5)
+        .build()
+        .unwrap();
+
+    let input = AgentInput {
+        messages: vec![Message::user("Hi")],
+        enable_streaming: false,
+    };
+
+    let result = agent.run(input).await;
+    match result {
+        Ok(event) => assert!(event.output.message.is_some()),
+        Err(e) => panic!("agent.run failed: {}", e),
+    }
+}
+
+#[tokio::test]
+async fn test_graph_react_agent_run_with_tool_call() {
+    use synapse::schema::{FunctionCall, ToolCall};
+
+    let model = MockChatModel::new(vec![Message {
+        role: RoleType::Assistant,
+        content: Content::Text("Calling tool".to_string()),
+        name: None,
+        tool_call_id: None,
+        tool_calls: Some(vec![ToolCall {
+            id: "call_1".to_string(),
+            tool_type: "function".to_string(),
+            function: FunctionCall {
+                name: "my_tool".to_string(),
+                arguments: "{}".to_string(),
+            },
+        }]),
+    }]);
+
+    let agent = GraphReActAgent::builder()
+        .with_model(model)
+        .max_steps(5)
+        .build()
+        .unwrap();
+
+    let input = AgentInput {
+        messages: vec![Message::user("Use a tool")],
+        enable_streaming: false,
+    };
+
+    let result = agent.run(input).await;
+    match result {
+        Ok(event) => {
+            let msg = event.output.message.expect("expected a message");
+            if let Content::Text(s) = msg.content {
+                assert!(s.contains("Tool") || s.contains("tool"), "got: {}", s);
+            }
+        }
+        Err(e) => panic!("agent.run failed: {}", e),
+    }
+}
