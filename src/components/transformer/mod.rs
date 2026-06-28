@@ -7,10 +7,12 @@
 pub mod character_splitter;
 pub mod markdown_header_splitter;
 pub mod recursive_character_splitter;
+pub mod token_splitter;
 
 pub use character_splitter::CharacterTextSplitter;
 pub use markdown_header_splitter::MarkdownHeaderSplitter;
 pub use recursive_character_splitter::RecursiveCharacterTextSplitter;
+pub use token_splitter::TokenTextSplitter;
 
 use async_trait::async_trait;
 
