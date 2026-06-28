@@ -8,6 +8,8 @@ pub mod character_splitter;
 pub mod markdown_header_splitter;
 pub mod recursive_character_splitter;
 
+pub use character_splitter::CharacterTextSplitter;
+
 use async_trait::async_trait;
 
 use crate::components::document::DocumentResult;
