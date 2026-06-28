@@ -82,12 +82,12 @@ Synapse 已有以下 Agent 抽象：
 // src/adk/multiagent/agent_tool.rs
 pub struct AgentTool {
     agent: Arc<dyn Agent>,
-    info: ToolInfo,  // 缓存：避免每次 invoke 重复生成 schema
+    cached_info: ToolInfo,  // 缓存：避免每次 invoke 重复生成 schema
 }
 
 impl AgentTool {
     pub fn new(agent: Arc<dyn Agent>) -> Self {
-        let info = ToolInfo {
+        let cached_info = ToolInfo {
             name: format!("route_to_{}", agent.name()),
             description: agent.description(),
             parameters: json!({
@@ -101,13 +101,13 @@ impl AgentTool {
                 "required": ["task"]
             }),
         };
-        Self { agent, info }
+        Self { agent, cached_info }
     }
 }
 
 impl BaseTool for AgentTool {
     fn info(&self) -> impl Future<Output = Result<ToolInfo, ToolError>> + Send {
-        async move { Ok(self.info.clone()) }
+        async move { Ok(self.cached_info.clone()) }
     }
 }
 
@@ -170,6 +170,7 @@ impl InvokableTool for AgentTool {
 pub struct RouterSupervisor<M: BaseChatModel + 'static> {
     inner: ChatModelAgent<M, AgentTool>,
     name: String,
+    description: String,
 }
 
 impl<M: BaseChatModel + 'static> RouterSupervisor<M> {
@@ -180,7 +181,7 @@ impl<M: BaseChatModel + 'static> RouterSupervisor<M> {
 
 impl<M: BaseChatModel + Send + Sync + 'static> Agent for RouterSupervisor<M> {
     fn name(&self) -> String { self.name.clone() }
-    fn description(&self) -> String { self.inner.description() }
+    fn description(&self) -> String { self.description.clone() }
     async fn run(&self, input: AgentInput) -> AgentResult<AgentEvent> {
         self.inner.run(input).await
     }
@@ -246,6 +247,7 @@ impl<M: BaseChatModel + 'static> RouterSupervisorBuilder<M> {
         RouterSupervisor {
             inner,
             name: self.name,
+            description: self.description,
         }
     }
 }
@@ -473,6 +475,18 @@ let result = supervisor.run(input).await?;
 | 5 | `test_router_max_iterations_exceeded` | 死循环场景 | 第 N 次迭代后返回 MaxIterationsExceeded |
 | 6 | `test_router_nested` | RouterSupervisor 嵌套 | 外层 → 内层 → sub-agent；嵌套调用链正确 |
 | 7 | `test_router_empty_agents` | 没有任何 sub-agent 注册 | supervisor 只能用纯 LLM 能力回答（不报错） |
+
+#### Mock 模型序列（每个测试的具体 mock 配置）
+
+| Test | Mock 模型返回序列 | 验证点 |
+|------|------------------|--------|
+| 1 | ① tool_call(route_to_researcher, "capital of France?") ② text("Paris.") | researcher.received_tasks == ["capital of France?"]; 最终输出包含 "Paris" |
+| 2 | ① tool_call(route_to_researcher, "Q1") ② tool_call(route_to_calc, "Q2") ③ text("Both done") | 两个 sub-agent 都被调；received_tasks 各 1 项；最终 answer 包含两个 sub-agent 的输出 |
+| 3 | ① text("Direct answer, no agent needed") | sub-agent.received_tasks 为空；最终输出 == "Direct answer, no agent needed" |
+| 4 | ① tool_call(route_to_failing, "X") ② text("Could not complete") | final answer 反映失败；tool result 包含 `success=false`（通过 supervisor 看到失败信息后能继续） |
+| 5 | 永远返回 tool_call（无 text 出口）`max_iterations=3` | 返回 `AgentError::MaxIterationsExceeded` |
+| 6 | **Outer mock**: ① tool_call(route_to_inner, "outer task") ② text("Outer synthesized")<br>**Inner mock**: ① tool_call(route_to_sub, "inner task") ② text("Inner result") | inner.received_tasks == ["inner task"]; 最终输出包含 "Inner result" |
+| 7 | ① text("Pure LLM answer") | 0 个 agent 被注册；supervisor 不报错；最终 answer == "Pure LLM answer" |
 
 #### Mock 工具
 
