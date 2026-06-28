@@ -7,13 +7,17 @@
 //!   tasks to specialized sub-agents, with multi-turn support.
 //! - [`OrchestratorAgent`]: Decomposes tasks and dispatches sub-agents
 //!   in parallel, then synthesizes results.
+//! - [`HandoffSupervisor`]: Sub-agents hand off conversations to each
+//!   other via `event.action.transfer_to`.
 //!
 //! See `docs/superpowers/specs/` for designs.
 
 pub mod agent_tool;
+pub mod handoff;
 pub mod orchestrator;
 pub mod router;
 
 pub use agent_tool::AgentTool;
+pub use handoff::{HandoffSupervisor, HandoffSupervisorBuilder};
 pub use orchestrator::{OrchestratorAgent, OrchestratorAgentBuilder};
 pub use router::{RouterSupervisor, RouterSupervisorBuilder};
