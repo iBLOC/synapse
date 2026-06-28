@@ -9,6 +9,7 @@ pub mod markdown_header_splitter;
 pub mod recursive_character_splitter;
 
 pub use character_splitter::CharacterTextSplitter;
+pub use recursive_character_splitter::RecursiveCharacterTextSplitter;
 
 use async_trait::async_trait;
 
