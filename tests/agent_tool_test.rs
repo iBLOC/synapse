@@ -111,3 +111,68 @@ async fn test_agent_tool_invoke_passes_task_and_returns_json() {
     assert_eq!(parsed["success"], true);
     assert_eq!(parsed["output"], "Paris is the capital");
 }
+
+struct FailingMockAgent {
+    name: String,
+    description: String,
+}
+
+#[async_trait]
+impl Agent for FailingMockAgent {
+    fn name(&self) -> String {
+        self.name.clone()
+    }
+    fn description(&self) -> String {
+        self.description.clone()
+    }
+    async fn run(&self, _input: AgentInput) -> Result<AgentEvent, AgentError> {
+        Err(AgentError::Agent("mock failure".to_string()))
+    }
+    async fn resume(
+        &self,
+        _checkpoint: Vec<u8>,
+        _info: ResumeInfo,
+    ) -> Result<AgentEvent, AgentError> {
+        unimplemented!()
+    }
+}
+
+#[tokio::test]
+async fn test_agent_tool_invoke_returns_error_as_json() {
+    let agent: Arc<dyn Agent> = Arc::new(FailingMockAgent {
+        name: "broken".to_string(),
+        description: "Always fails".to_string(),
+    });
+    let tool = AgentTool::new(agent);
+
+    let result = tool
+        .invoke(r#"{"task": "anything"}"#.to_string())
+        .await
+        .unwrap();
+
+    let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+    assert_eq!(parsed["agent"], "broken");
+    assert_eq!(parsed["success"], false);
+    assert!(parsed["error"]
+        .as_str()
+        .unwrap()
+        .contains("mock failure"));
+}
+
+#[tokio::test]
+async fn test_agent_tool_invoke_throws_on_invalid_args() {
+    let agent = MockAgent::new("x", "x", "x");
+    let tool = AgentTool::new(agent);
+
+    let result = tool.invoke("not json".to_string()).await;
+    assert!(matches!(
+        result,
+        Err(ToolError::InvalidArguments(_))
+    ));
+
+    let result = tool.invoke(r#"{}"#.to_string()).await;
+    assert!(matches!(
+        result,
+        Err(ToolError::InvalidArguments(_))
+    ));
+}
