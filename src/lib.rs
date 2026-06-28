@@ -4,6 +4,7 @@ pub mod callbacks;
 pub mod components;
 pub mod compose;
 pub mod llm;
+pub mod mcp;
 pub mod protocol;
 pub mod providers;
 pub mod scheduler;
