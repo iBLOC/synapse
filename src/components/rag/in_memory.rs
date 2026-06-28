@@ -128,6 +128,7 @@ impl Indexer for InMemoryIndexer {
             .map(|(i, t)| Document {
                 id: format!("doc_{}", i),
                 content: t,
+                mime_type: "text/plain".to_string(),
                 metadata: Default::default(),
             })
             .collect();

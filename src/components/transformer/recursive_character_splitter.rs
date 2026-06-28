@@ -40,6 +40,7 @@ impl DocumentTransformer for RecursiveCharacterTextSplitter {
                 result.push(Document {
                     id: format!("{}_{}", doc.id, i),
                     content: chunk_text,
+                    mime_type: doc.mime_type.clone(),
                     metadata,
                 });
             }

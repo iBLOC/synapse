@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use serde_json::json;
-use synapse::components::retriever::Document;
+use synapse::components::document::Document;
 use synapse::components::transformer::{CharacterTextSplitter, DocumentTransformer};
 
 fn make_doc(id: &str, content: &str) -> Document {
     Document {
         id: id.into(),
         content: content.into(),
+        mime_type: "text/plain".into(),
         metadata: HashMap::new(),
     }
 }
@@ -41,6 +42,7 @@ async fn test_character_splitter_metadata_preserved() {
     let doc = Document {
         id: "doc1".into(),
         content: "a".repeat(200),
+        mime_type: "text/plain".into(),
         metadata,
     };
     let chunks = splitter.transform(vec![doc]).await.unwrap();

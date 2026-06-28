@@ -49,6 +49,7 @@ impl DocumentTransformer for MarkdownHeaderSplitter {
                 result.push(Document {
                     id: format!("{}_{}", doc.id, i),
                     content,
+                    mime_type: doc.mime_type.clone(),
                     metadata,
                 });
             }

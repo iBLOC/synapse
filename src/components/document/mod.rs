@@ -52,6 +52,10 @@ impl Document {
         }
     }
 
+    pub fn text(id: impl Into<String>, content: impl Into<String>) -> Self {
+        Self::new(id, content, "text/plain")
+    }
+
     pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
         self.metadata.insert(key.into(), value);
         self
