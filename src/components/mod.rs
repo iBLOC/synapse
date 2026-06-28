@@ -3,5 +3,6 @@ pub mod embedding;
 pub mod indexer;
 pub mod model;
 pub mod prompt;
+pub mod rag;
 pub mod retriever;
 pub mod tool;
