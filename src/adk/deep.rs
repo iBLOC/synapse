@@ -153,6 +153,9 @@ impl<M: BaseChatModel + Send + Sync + 'static> Agent for DeepAgent<M> {
     }
 }
 
+/// Legacy LLM-based router. For new code, prefer
+/// [`crate::adk::multiagent::RouterSupervisor`], which uses structured
+/// tool calls for reliable multi-turn routing and supports nesting.
 pub struct Supervisor<M: BaseChatModel> {
     name: String,
     model: Arc<M>,
