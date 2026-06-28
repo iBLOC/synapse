@@ -1,0 +1,33 @@
+[book]
+title = "Synapse User Guide"
+description = "Rust-based intelligent agent development framework"
+authors = ["Synapse Contributors"]
+language = "en"
+multilingual = false
+src = "src"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/synapse-rs/synapse"
+edit-url-template = "https://github.com/synapse-rs/synapse/edit/master/docs/src/{path}"
+site-url = "/synapse/"
+no-prepend-js = false
+additional-css = ["src/custom.css"]
+mathjax-support = false
+copy-fonts = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true
+limit-results = 20
+teaser-word-count = 30
+use-boolean-and = true
+boost-title = 2
+boost-hierarchy = 1
+boost-paragraph = 1
+expand = true
+heading-split-level = 3

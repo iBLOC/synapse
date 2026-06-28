@@ -1,0 +1,25 @@
+/* Synapse docs custom styles */
+
+:root {
+  --synapse-primary: #ff6b35;
+  --synapse-secondary: #004e89;
+}
+
+.chapter li.chapter-item strong {
+  color: var(--synapse-secondary);
+}
+
+blockquote {
+  border-left: 4px solid var(--synapse-primary);
+  padding-left: 1rem;
+  margin-left: 0;
+  color: #555;
+}
+
+code {
+  background-color: #f4f4f4;
+}
+
+pre code {
+  border-left: 3px solid var(--synapse-primary);
+}

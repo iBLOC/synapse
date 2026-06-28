@@ -3,8 +3,10 @@ name = "synapse"
 version = "0.1.0"
 edition = "2021"
 description = "Rust-based intelligent agent development framework"
-license = "MIT"
-authors = ["Synapse Team"]
+license = "Apache-2.0"
+authors = ["Synapse Contributors"]
+repository = "https://github.com/synapse-rs/synapse"
+homepage = "https://synapse-rs.github.io/synapse/"
 
 [dependencies]
 # Logging & tracing
@@ -40,13 +42,19 @@ dashmap = "5"
 # Regex for pattern matching
 regex = "1"
 
+# WASM runtime (always available — agents run in WASM by default)
+wasmtime = "20"
+wat = "1"
+
+# Hashing for package integrity
+sha2 = "0.10"
+
 [dev-dependencies]
 tokio-test = "0.4"
 mockito = "1"
 
 [features]
 default = []
-wasm = []
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["full", "sync"] }

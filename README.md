@@ -2,8 +2,11 @@
 
 **Rust-based intelligent agent development framework** — 对标 LangChain / Eino，提供 LLM agent、RAG、MultiAgent、MCP、A2A、WASM 隔离等核心能力。
 
-[![Tests](https://img.shields.io/badge/tests-144%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-157%20passing-brightgreen)]()
 [![Rust](https://img.shields.io/badge/rust-1.75%2B-blue)]()
+[![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
+
+📖 **Full documentation:** <https://synapse-rs.github.io/synapse/> (build locally with `mdbook serve docs/`)
 
 ## ✨ 核心能力
 
@@ -190,7 +193,7 @@ let a2a = A2AAdapter::new(Arc::new(ReqwestHttpClient::new()));
 cargo test
 ```
 
-**144 tests passing**（基础 87 + MultiAgent 26 + Document 9 + Transformer + 整合 22）。
+**157 tests passing**（基础 87 + MultiAgent 26 + Document 9 + Transformer + 整合 22 + 整合 11）。
 
 ## 📦 编译目标
 
@@ -203,10 +206,18 @@ cargo test
 - **神经元 Neuron** — LLM 运行时
 - **前额叶 PFC** — 多 agent 编排 + WASM 隔离运行时
 
-## 📚 设计 Specs
+## 📚 文档
 
-`docs/superpowers/specs/` 包含所有架构决策的设计文档。
+完整使用文档：<https://synapse-rs.github.io/synapse/>
+
+本地构建：
+```bash
+cargo install mdbook
+cd docs && mdbook serve
+```
+
+设计 Specs：`docs/superpowers/specs/`
 
 ## 📝 License
 
-MIT
+[Apache License 2.0](LICENSE)
