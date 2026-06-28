@@ -46,16 +46,19 @@ async fn test_in_memory_vector_store_cosine_search() {
         Document {
             id: "1".to_string(),
             content: "Rust is a systems programming language".to_string(),
+            mime_type: "text/plain".to_string(),
             metadata: Default::default(),
         },
         Document {
             id: "2".to_string(),
             content: "Python is a dynamic language".to_string(),
+            mime_type: "text/plain".to_string(),
             metadata: Default::default(),
         },
         Document {
             id: "3".to_string(),
             content: "Rust focuses on safety and performance".to_string(),
+            mime_type: "text/plain".to_string(),
             metadata: Default::default(),
         },
     ];
@@ -80,16 +83,19 @@ async fn test_indexer_and_retriever_roundtrip() {
         Document {
             id: "a".to_string(),
             content: "the quick brown fox".to_string(),
+            mime_type: "text/plain".to_string(),
             metadata: Default::default(),
         },
         Document {
             id: "b".to_string(),
             content: "jumps over the lazy dog".to_string(),
+            mime_type: "text/plain".to_string(),
             metadata: Default::default(),
         },
         Document {
             id: "c".to_string(),
             content: "the brown fox runs".to_string(),
+            mime_type: "text/plain".to_string(),
             metadata: Default::default(),
         },
     ];
@@ -121,11 +127,13 @@ async fn test_indexer_delete() {
         Document {
             id: "x".to_string(),
             content: "alpha".to_string(),
+            mime_type: "text/plain".to_string(),
             metadata: Default::default(),
         },
         Document {
             id: "y".to_string(),
             content: "beta".to_string(),
+            mime_type: "text/plain".to_string(),
             metadata: Default::default(),
         },
     ];

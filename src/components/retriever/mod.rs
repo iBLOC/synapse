@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
+
+pub use crate::components::document::Document;
 
 pub type RetrieverResult<T> = Result<T, RetrieverError>;
 
@@ -9,13 +10,6 @@ pub enum RetrieverError {
     Retrieve(String),
     #[error("invalid query: {0}")]
     InvalidQuery(String),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Document {
-    pub id: String,
-    pub content: String,
-    pub metadata: std::collections::HashMap<String, serde_json::Value>,
 }
 
 #[async_trait]

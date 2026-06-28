@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
-use synapse::components::retriever::Document;
+use synapse::components::document::Document;
 use synapse::components::transformer::{DocumentTransformer, RecursiveCharacterTextSplitter};
 
 fn make_doc(id: &str, content: &str) -> Document {
     Document {
         id: id.into(),
         content: content.into(),
+        mime_type: "text/plain".into(),
         metadata: HashMap::new(),
     }
 }
