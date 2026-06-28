@@ -6,3 +6,4 @@ pub mod prompt;
 pub mod rag;
 pub mod retriever;
 pub mod tool;
+pub mod transformer;
