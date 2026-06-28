@@ -59,6 +59,7 @@ pub struct ChatModelAgent<M: BaseChatModel, T: InvokableTool> {
     max_iterations: usize,
     temperature: Option<f32>,
     tool_middleware: Vec<Arc<dyn ToolMiddleware>>,
+    system_prompt: Option<String>,
 }
 
 impl<M: BaseChatModel + 'static, T: InvokableTool + 'static> ChatModelAgent<M, T> {
@@ -72,6 +73,7 @@ impl<M: BaseChatModel + 'static, T: InvokableTool + 'static> ChatModelAgent<M, T
             max_iterations: 10,
             temperature: None,
             tool_middleware: Vec::new(),
+            system_prompt: None,
         }
     }
 
@@ -97,6 +99,11 @@ impl<M: BaseChatModel + 'static, T: InvokableTool + 'static> ChatModelAgent<M, T
 
     pub fn with_tool_middleware(mut self, middleware: Arc<dyn ToolMiddleware>) -> Self {
         self.tool_middleware.push(middleware);
+        self
+    }
+
+    pub fn with_system_prompt(mut self, prompt: impl Into<String>) -> Self {
+        self.system_prompt = Some(prompt.into());
         self
     }
 
@@ -157,6 +164,10 @@ impl<M: BaseChatModel + 'static, T: InvokableTool + 'static> ChatModelAgent<M, T
     pub async fn run_loop(&self, messages: Vec<Message>) -> Result<AgentEvent, AgentError> {
         let mut iterations = 0;
         let mut current_messages = messages;
+
+        if let Some(prompt) = &self.system_prompt {
+            current_messages.insert(0, Message::system(prompt.clone()));
+        }
 
         // Check if input matches any skill
         if let Some(first_msg) = current_messages.first() {
