@@ -16,6 +16,7 @@ pub mod skills;
 pub mod task;
 pub mod transport;
 pub mod utils;
+pub mod wasm;
 
 pub use a2a::*;
 pub use adk::*;
@@ -32,3 +33,4 @@ pub use session::*;
 pub use skills::*;
 pub use task::*;
 pub use utils::*;
+pub use wasm::*;
