@@ -1,6 +1,8 @@
 pub mod a2a;
 pub mod adk;
+pub mod agent;
 pub mod callbacks;
+pub mod channels;
 pub mod components;
 pub mod compose;
 pub mod llm;
@@ -17,7 +19,9 @@ pub mod utils;
 
 pub use a2a::*;
 pub use adk::*;
+pub use agent::*;
 pub use callbacks::*;
+pub use channels::*;
 pub use components::*;
 pub use compose::*;
 pub use protocol::*;
