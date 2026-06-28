@@ -4,7 +4,9 @@ use std::sync::Arc;
 use synapse::adk::agent::react::GraphReActAgent;
 use synapse::adk::agent::{Agent, AgentInput};
 use synapse::components::model::{BaseChatModel, GenerateOptions, ModelError, ModelResult};
-use synapse::schema::{Content, Message, RoleType};
+use synapse::components::tool::{BaseTool, InvokableTool, ToolError};
+use synapse::compose::tool_node::{ToolsNode, ToolsNodeConfig};
+use synapse::schema::{Content, Message, RoleType, ToolInfo};
 
 struct MockChatModel {
     responses: Vec<Message>,
@@ -28,11 +30,11 @@ impl BaseChatModel for MockChatModel {
         _options: GenerateOptions,
     ) -> ModelResult<Message> {
         let idx = self.index.fetch_add(1, Ordering::SeqCst);
-        if idx < self.responses.len() {
-            Ok(self.responses[idx].clone())
-        } else {
-            Err(ModelError::Api("No more responses".to_string()))
+        if self.responses.is_empty() {
+            return Err(ModelError::Api("No responses configured".to_string()));
         }
+        let i = idx % self.responses.len();
+        Ok(self.responses[i].clone())
     }
 
     async fn stream(
@@ -95,27 +97,75 @@ async fn test_graph_react_agent_run_no_tools() {
     }
 }
 
+struct TestTool {
+    name: String,
+    response: String,
+}
+
+impl TestTool {
+    fn new(name: &str, response: &str) -> Arc<Self> {
+        Arc::new(Self {
+            name: name.to_string(),
+            response: response.to_string(),
+        })
+    }
+}
+
+impl BaseTool for TestTool {
+    fn info(&self) -> impl std::future::Future<Output = Result<ToolInfo, ToolError>> + Send {
+        let name = self.name.clone();
+        async move {
+            Ok(ToolInfo {
+                name,
+                description: "test tool".to_string(),
+                parameters: serde_json::json!({}),
+            })
+        }
+    }
+}
+
+#[async_trait]
+impl InvokableTool for TestTool {
+    async fn invoke(&self, _arguments: String) -> Result<String, ToolError> {
+        Ok(self.response.clone())
+    }
+}
+
 #[tokio::test]
 async fn test_graph_react_agent_run_with_tool_call() {
+    use synapse::compose::tool_node::ToolsNodeConfig;
     use synapse::schema::{FunctionCall, ToolCall};
 
-    let model = MockChatModel::new(vec![Message {
-        role: RoleType::Assistant,
-        content: Content::Text("Calling tool".to_string()),
-        name: None,
-        tool_call_id: None,
-        tool_calls: Some(vec![ToolCall {
-            id: "call_1".to_string(),
-            tool_type: "function".to_string(),
-            function: FunctionCall {
-                name: "my_tool".to_string(),
-                arguments: "{}".to_string(),
-            },
-        }]),
-    }]);
+    let model = MockChatModel::new(vec![
+        Message {
+            role: RoleType::Assistant,
+            content: Content::Text("".to_string()),
+            name: None,
+            tool_call_id: None,
+            tool_calls: Some(vec![ToolCall {
+                id: "call_1".to_string(),
+                tool_type: "function".to_string(),
+                function: FunctionCall {
+                    name: "my_tool".to_string(),
+                    arguments: "{}".to_string(),
+                },
+            }]),
+        },
+        Message::assistant("Final answer after tool call."),
+    ]);
+
+    let tool = TestTool::new("my_tool", "tool result text");
+    let tools_node = Arc::new(
+        ToolsNode::new(ToolsNodeConfig::<TestTool> {
+            tools: vec![tool],
+            ..Default::default()
+        })
+        .unwrap(),
+    );
 
     let agent = GraphReActAgent::builder()
         .with_model(model)
+        .with_tools_node(tools_node)
         .max_steps(5)
         .build()
         .unwrap();
@@ -130,9 +180,59 @@ async fn test_graph_react_agent_run_with_tool_call() {
         Ok(event) => {
             let msg = event.output.message.expect("expected a message");
             if let Content::Text(s) = msg.content {
-                assert!(s.contains("Tool") || s.contains("tool"), "got: {}", s);
+                assert!(s.contains("Final answer"), "got: {}", s);
+            } else {
+                panic!("expected Text content");
             }
         }
         Err(e) => panic!("agent.run failed: {}", e),
     }
+}
+
+#[tokio::test]
+async fn test_graph_react_agent_max_iterations() {
+    use synapse::compose::tool_node::ToolsNodeConfig;
+    use synapse::schema::{FunctionCall, ToolCall};
+
+    let model = MockChatModel::new(vec![Message {
+        role: RoleType::Assistant,
+        content: Content::Text("".to_string()),
+        name: None,
+        tool_call_id: None,
+        tool_calls: Some(vec![ToolCall {
+            id: "call_1".to_string(),
+            tool_type: "function".to_string(),
+            function: FunctionCall {
+                name: "my_tool".to_string(),
+                arguments: "{}".to_string(),
+            },
+        }]),
+    }]);
+
+    let tool = TestTool::new("my_tool", "always calls tool, never returns final");
+    let tools_node = Arc::new(
+        ToolsNode::new(ToolsNodeConfig::<TestTool> {
+            tools: vec![tool],
+            ..Default::default()
+        })
+        .unwrap(),
+    );
+
+    let agent = GraphReActAgent::builder()
+        .with_model(model)
+        .with_tools_node(tools_node)
+        .max_steps(2)
+        .build()
+        .unwrap();
+
+    let input = AgentInput {
+        messages: vec![Message::user("Loop forever")],
+        enable_streaming: false,
+    };
+
+    let result = agent.run(input).await;
+    assert!(matches!(
+        result,
+        Err(synapse::adk::agent::AgentError::MaxIterationsExceeded)
+    ));
 }

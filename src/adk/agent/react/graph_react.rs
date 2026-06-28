@@ -1,17 +1,19 @@
 use crate::adk::agent::{Agent, AgentError, AgentEvent, AgentInput, AgentOutput, AgentResult};
 use crate::components::model::{BaseChatModel, GenerateOptions};
 use crate::compose::runnable::{Context, Runnable, RunnableError, RunnableFuture};
+use crate::compose::tool_node::ToolsNode;
 use crate::compose::{CompiledGraph, Graph, NodeTriggerMode, END, START};
-use crate::graph::{GraphBranch, GraphCompileOptions};
-use crate::schema::{Content, Message, RoleType};
+use crate::graph::GraphCompileOptions;
+use crate::schema::Message;
 use async_trait::async_trait;
 use std::sync::Arc;
 
 pub struct GraphReActAgent {
     name: String,
     description: String,
-    compiled_graph: Arc<CompiledGraph<Vec<Message>, Message>>,
+    tools_node: Option<Arc<ToolsNode>>,
     max_steps: usize,
+    compiled_graph: Arc<CompiledGraph<Vec<Message>, Message>>,
 }
 
 impl GraphReActAgent {
@@ -31,21 +33,42 @@ impl Agent for GraphReActAgent {
     }
 
     async fn run(&self, input: AgentInput) -> AgentResult<AgentEvent> {
-        let compiled_graph = self.compiled_graph.clone();
+        let mut history = input.messages;
 
-        let output = compiled_graph
-            .invoke(Context::new(), input.messages)
-            .await
-            .map_err(|e| AgentError::Agent(e.to_string()))?;
+        for _ in 0..self.max_steps {
+            let response = self
+                .compiled_graph
+                .invoke(Context::new(), history.clone())
+                .await
+                .map_err(|e| AgentError::Agent(e.to_string()))?;
 
-        Ok(AgentEvent {
-            agent_name: self.name.clone(),
-            output: AgentOutput {
-                message: Some(output),
-                action: None,
-            },
-            error: None,
-        })
+            let tool_calls = response.tool_calls.clone().unwrap_or_default();
+            if tool_calls.is_empty() {
+                return Ok(AgentEvent {
+                    agent_name: self.name.clone(),
+                    output: AgentOutput {
+                        message: Some(response),
+                        action: None,
+                    },
+                    error: None,
+                });
+            }
+
+            history.push(response.clone());
+
+            let tools_node = self.tools_node.as_ref().ok_or_else(|| {
+                AgentError::Agent("tool_calls present but no tools configured".to_string())
+            })?;
+
+            let tool_results: Vec<Message> = tools_node
+                .invoke(Context::new(), response)
+                .await
+                .map_err(|e| AgentError::Agent(e.to_string()))?;
+
+            history.extend(tool_results);
+        }
+
+        Err(AgentError::MaxIterationsExceeded)
     }
 
     async fn resume(
@@ -61,6 +84,7 @@ pub struct GraphReActAgentBuilder {
     name: String,
     description: String,
     model: Option<Arc<dyn BaseChatModel>>,
+    tools_node: Option<Arc<ToolsNode>>,
     max_steps: usize,
 }
 
@@ -70,6 +94,7 @@ impl GraphReActAgentBuilder {
             name: "ReActAgent".to_string(),
             description: "".to_string(),
             model: None,
+            tools_node: None,
             max_steps: 12,
         }
     }
@@ -89,6 +114,11 @@ impl GraphReActAgentBuilder {
         self
     }
 
+    pub fn with_tools_node(mut self, tools_node: Arc<ToolsNode>) -> Self {
+        self.tools_node = Some(tools_node);
+        self
+    }
+
     pub fn max_steps(mut self, max: usize) -> Self {
         self.max_steps = max;
         self
@@ -104,8 +134,9 @@ impl GraphReActAgentBuilder {
         Ok(GraphReActAgent {
             name: self.name,
             description: self.description,
-            compiled_graph: Arc::new(compiled_graph),
+            tools_node: self.tools_node,
             max_steps: self.max_steps,
+            compiled_graph: Arc::new(compiled_graph),
         })
     }
 }
@@ -121,7 +152,7 @@ impl ChatModelNode {
 }
 
 impl Runnable<serde_json::Value, serde_json::Value> for ChatModelNode {
-    fn invoke(&self, ctx: Context, input: serde_json::Value) -> RunnableFuture<serde_json::Value> {
+    fn invoke(&self, _ctx: Context, input: serde_json::Value) -> RunnableFuture<serde_json::Value> {
         let model = self.model.clone();
 
         Box::pin(async move {
@@ -153,78 +184,13 @@ fn build_graph(
     let chat_node = ChatModelNode::new(model);
     graph.add_node("chat", Arc::new(chat_node));
 
-    let tools_node = ToolsGraphNode::new();
-    graph.add_node("tools", Arc::new(tools_node));
-
     graph.add_edge(START, "chat");
-    graph.add_edge("chat", "tools");
     graph.add_edge("chat", END);
-    graph.add_edge("tools", END);
-
-    let has_tool_calls_branch = GraphBranch::new(
-        move |_ctx: &Context, input: &serde_json::Value| {
-            if let Ok(msg) = serde_json::from_value::<Message>(input.clone()) {
-                if msg.tool_calls.is_some() && !msg.tool_calls.as_ref().unwrap().is_empty() {
-                    return Ok(Some("tools".to_string()));
-                }
-            }
-            Ok(None)
-        },
-        vec!["tools".to_string(), END.to_string()]
-            .into_iter()
-            .collect(),
-    );
-    graph.add_branch("chat", has_tool_calls_branch);
 
     graph
         .compile_with_options(GraphCompileOptions {
-            max_steps,
+            max_steps: max_steps * 4 + 1,
             ..Default::default()
         })
         .map_err(|e| AgentError::Agent(e.to_string()))
-}
-
-struct ToolsGraphNode;
-
-impl ToolsGraphNode {
-    fn new() -> Self {
-        Self
-    }
-}
-
-impl Runnable<serde_json::Value, serde_json::Value> for ToolsGraphNode {
-    fn invoke(&self, _ctx: Context, input: serde_json::Value) -> RunnableFuture<serde_json::Value> {
-        Box::pin(async move {
-            let msg: Message = match serde_json::from_value(input.clone()) {
-                Ok(m) => m,
-                Err(_) => return Ok(input),
-            };
-
-            let tool_calls = msg.tool_calls.clone().unwrap_or_default();
-            if tool_calls.is_empty() {
-                return Ok(input);
-            }
-
-            let mut combined_text = String::new();
-            for tc in &tool_calls {
-                combined_text.push_str(&format!(
-                    "Tool {} result: tool not found\n",
-                    tc.function.name
-                ));
-            }
-            let result_msg = Message {
-                role: RoleType::Tool,
-                content: Content::Text(combined_text),
-                name: None,
-                tool_call_id: None,
-                tool_calls: None,
-            };
-
-            serde_json::to_value(result_msg).map_err(|e| RunnableError::Invoke(e.to_string()))
-        })
-    }
-
-    fn name(&self) -> String {
-        "tools".to_string()
-    }
 }
