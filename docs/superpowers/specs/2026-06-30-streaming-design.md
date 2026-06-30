@@ -96,10 +96,30 @@ version: 0.1
 
 ### 3.2 Cross-process — A2A layer (separate concern, layered on top)
 
+The A2A layer is **orthogonal to the in-process streaming stack**. It bridges the `AgentStreamEvent` bus to a wire-protocol boundary.
+
 ```
-Synapse-side A2A wrapper  →  a2a_server (SDK)  →  axum  →  peer agents
-                         ↘  a2a_client (SDK)  →  reqwest / a2a_peer
+┌─────────────────────────────────────────────────────────────────┐
+│  A2A Server Side                                                 │
+│    SynapseAgent (impl Agent)                                     │
+│      └─ impl AgentExecutor (2 methods) ─┐                        │
+│                                         ▼                        │
+│    DefaultRequestHandler (SDK, free) ─► ExecutionManager         │
+│      • Task lifecycle                  • ExecutionManager        │
+│      • Push notifications (opt-in)     • subscribe w/ resubscribe│
+│      • All 11 RequestHandler methods   • 4 StreamResponse kinds  │
+│      └─ axum router (JSON-RPC + SSE)                            │
+├─────────────────────────────────────────────────────────────────┤
+│  A2A Client Side                                                 │
+│    A2AClient (user-facing wrapper)                              │
+│      └─ a2a_client::A2AClient<T>  (generic over Transport)      │
+│         • Built-in CallInterceptor (auth hook)                  │
+│         • Auto protocol negotiation via A2AClientFactory        │
+│         └─ reqwest (JSON-RPC over HTTP / SSE)                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+The user writes code against **`AgentStreamEvent`** (in-process) and **`a2a::types`** (wire). The translation layer (§9.2) bridges them. No `RequestHandler` is implemented by Synapse — we only implement `AgentExecutor` (2 methods) and inherit everything else from `DefaultRequestHandler`.
 
 ## 4. Core Types
 
@@ -701,37 +721,43 @@ Reverse direction (A2A → Synapse) is symmetric. The default artifact name is `
 
 ### 9.3 A2A client — `src/a2a/client.rs`
 
-Thin wrapper over `a2a_client::Client`:
+The upstream `a2a_client::A2AClient<T: Transport>` is already generic over transport, has built-in interceptor middleware (`CallInterceptor`), and offers all 11 method bindings. We provide two thin wrappers:
 
 ```rust
 // src/a2a/client.rs
 
-use a2a::types::{SendMessageRequest, SendMessageResponse, StreamResponse, A2AError};
-use a2a_client::Client as SdkClient;
+use a2a::{SendMessageRequest, SendMessageResponse, A2AError, StreamResponse};
+use a2a_client::{A2AClient as SdkClient, A2AClientFactory};
 use crate::adk::stream::{AgentStream, AgentStreamEvent};
 use crate::stream::StreamReader;
+use futures::StreamExt;
 
+/// User-facing A2A client. Wraps the generic `a2a_client::A2AClient<T>`.
 pub struct A2AClient {
-    sdk: SdkClient,
+    sdk: SdkClient<HttpJsonRpcTransport>,  // transport chosen by A2AClientFactory
     peer: String,
 }
 
 impl A2AClient {
+    /// Connect to a peer, auto-negotiating transport (JSON-RPC vs HTTP+JSON) from its agent card.
     pub async fn connect(peer: &str) -> Result<Self, A2AError> {
-        let sdk = SdkClient::connect(peer).await?;
-        Ok(Self { sdk, peer: peer.into() })
+        let client = A2AClientFactory::default()
+            .create_client(peer)        // fetches /.well-known/agent-card.json, picks transport
+            .await?;
+        Ok(Self { sdk: client, peer: peer.into() })
     }
 
-    // Synchronous send (existing capability)
+    // Synchronous send
     pub async fn send_message(&self, req: SendMessageRequest) -> Result<SendMessageResponse, A2AError> {
-        self.sdk.send_message(req).await
+        self.sdk.send_message(&req).await
     }
 
-    // NEW: streaming send
+    // NEW: streaming send — wraps SDK stream in StreamReader<AgentStreamEvent>
     pub async fn stream_send(&self, req: SendMessageRequest) -> Result<AgentStream, A2AError> {
         let (writer, reader) = StreamReader::new(128);
         let cancel = reader.cancel_handle();
-        let mut sdk_stream = self.sdk.send_streaming_message(req).await?;
+        let mut sdk_stream = self.sdk.send_streaming_message(&req).await?;
+        let peer = self.peer.clone();
 
         tokio::spawn(async move {
             while let Some(ev_res) = sdk_stream.next().await {
@@ -756,89 +782,122 @@ impl A2AClient {
         Ok(reader)
     }
 
-    // NEW: subscribe to existing task (with auto-resubscribe on disconnect)
+    // NEW: subscribe to existing task (auto-resubscribe on disconnect handled by SDK)
     pub async fn subscribe_task(&self, task_id: &str) -> Result<AgentStream, A2AError> {
-        // Same shape as stream_send, but uses sdk.subscribe_to_task
-        // The SDK handles automatic resubscribe on transient disconnects.
+        let req = SubscribeToTaskRequest { id: task_id.into(), tenant: None };
+        let (writer, reader) = StreamReader::new(128);
+        let cancel = reader.cancel_handle();
+        let mut sdk_stream = self.sdk.subscribe_to_task(&req).await?;
+        let peer = self.peer.clone();
+
+        tokio::spawn(async move {
+            while let Some(ev_res) = sdk_stream.next().await {
+                if cancel.is_cancelled() { return; }
+                match ev_res {
+                    Ok(sdk_ev) => {
+                        for syn_ev in translate::from_a2a_event(sdk_ev, peer.clone()) {
+                            if writer.send_value(syn_ev).await == false { return; }
+                        }
+                    }
+                    Err(e) => {
+                        writer.send_value(AgentStreamEvent::Error {
+                            agent: "a2a_client".into(),
+                            error: e.into(),
+                        }).await;
+                        return;
+                    }
+                }
+            }
+        });
+
+        Ok(reader)
     }
+
+    // Tasks CRUD (non-streaming)
+    pub async fn get_task(&self, task_id: &str) -> Result<Task, A2AError> {
+        self.sdk.get_task(&GetTaskRequest { id: task_id.into(), history_length: None, tenant: None }).await
+    }
+    pub async fn list_tasks(&self) -> Result<ListTasksResponse, A2AError> {
+        self.sdk.list_tasks(&ListTasksRequest::default()).await
+    }
+    pub async fn cancel_task(&self, task_id: &str) -> Result<Task, A2AError> {
+        self.sdk.cancel_task(&CancelTaskRequest { id: task_id.into(), metadata: None, tenant: None }).await
+    }
+
+    pub async fn destroy(self) -> Result<(), A2AError> { self.sdk.destroy().await }
 }
 ```
 
+**Note**: `A2AClient<T: Transport>` is generic in the SDK. For the user-facing wrapper we choose `HttpJsonRpcTransport` (the most common wire format). Power users can construct a typed `A2AClient<HttpJsonTransport>` directly via `A2AClientFactory` for HTTP+JSON binding.
+
 ### 9.4 A2A server — `src/a2a/server.rs`
+
+The SDK provides **`AgentExecutor`** (a 2-method trait) and **`DefaultRequestHandler`** (the full 11-method implementation with built-in task lifecycle, push notification, resubscribe). We only need to implement `AgentExecutor` and let the SDK handle everything else.
 
 ```rust
 // src/a2a/server.rs
 
-use a2a::types::*;
-use a2a_server::{RequestHandler, ServiceParams, InMemoryTaskStore, TaskStore, AgentCardProducer};
+use a2a::*;
+use a2a_server::{AgentExecutor, ExecutorContext, DefaultRequestHandler, InMemoryTaskStore};
 use crate::adk::agent::Agent;
 use std::sync::Arc;
+use futures::stream::StreamExt;
 
-/// Adapts a Synapse `Agent` to the SDK's `RequestHandler` interface.
-pub struct SynapseAgentHandler {
+/// Adapts a Synapse `Agent` to the SDK's `AgentExecutor` trait (only 2 methods).
+pub struct SynapseAgentExecutor {
     agent: Arc<dyn Agent>,
-    task_store: Arc<dyn TaskStore>,
     default_artifact_name: String,
 }
 
-#[a2a_server::async_trait]
-impl RequestHandler for SynapseAgentHandler {
-    async fn send_message(&self, _params: &ServiceParams, req: SendMessageRequest) -> Result<SendMessageResponse, A2AError> {
-        let task = self.task_store.create(req.message.context_id.clone()).await?;
-        let result = self.agent.run(req.message.into()).await
-            .map_err(|e| A2AError::internal(e.to_string()))?;
-        Ok(translate::agent_event_to_response(result, &task))
+impl SynapseAgentExecutor {
+    pub fn new(agent: Arc<dyn Agent>) -> Self {
+        Self { agent, default_artifact_name: "response".into() }
     }
+}
 
-    async fn send_streaming_message(
+#[async_trait::async_trait]
+impl AgentExecutor for SynapseAgentExecutor {
+    fn execute(
         &self,
-        _params: &ServiceParams,
-        req: SendMessageRequest,
-    ) -> Result<BoxStream<'static, Result<StreamResponse, A2AError>>, A2AError> {
-        let task = self.task_store.create(req.message.context_id.clone()).await?;
-        let mut agent_stream = self.agent.stream_run(req.message.into()).await;
-        let task_id = task.id.clone();
-        let context_id = task.context_id.clone();
+        ctx: ExecutorContext,
+    ) -> futures::stream::BoxStream<'static, Result<StreamResponse, A2AError>> {
+        let agent = self.agent.clone();
         let artifact_name = self.default_artifact_name.clone();
+        let task_id = ctx.task_id.clone();
+        let context_id = ctx.context_id.clone();
 
-        let stream = async_stream::stream! {
+        let message = ctx.message.unwrap_or_else(|| Message::new(Role::User, vec![Part::text("")]));
+        let input: AgentInput = message.into();
+
+        Box::pin(async_stream::stream! {
+            let mut agent_stream = agent.stream_run(input).await;
             while let Some(ev) = agent_stream.next().await {
                 for frame in translate::to_a2a_event(ev, &task_id, &context_id, &artifact_name) {
                     yield Ok(frame);
                 }
             }
-        };
-        Ok(Box::pin(stream))
+        })
     }
 
-    async fn get_task(&self, _params: &ServiceParams, req: GetTaskRequest) -> Result<Task, A2AError> {
-        self.task_store.get(&req.task_id).await
-    }
-
-    async fn list_tasks(&self, _params: &ServiceParams, req: ListTasksRequest) -> Result<ListTasksResponse, A2AError> {
-        self.task_store.list(req).await
-    }
-
-    async fn cancel_task(&self, _params: &ServiceParams, req: CancelTaskRequest) -> Result<Task, A2AError> {
-        self.task_store.cancel(&req.task_id).await
-    }
-
-    async fn subscribe_to_task(
+    fn cancel(
         &self,
-        _params: &ServiceParams,
-        req: SubscribeToTaskRequest,
-    ) -> Result<BoxStream<'static, Result<StreamResponse, A2AError>>, A2AError> {
-        // SDK's task store provides the subscribe stream
-        self.task_store.subscribe(&req.task_id).await
+        ctx: ExecutorContext,
+    ) -> futures::stream::BoxStream<'static, Result<StreamResponse, A2AError>> {
+        // Emit a single "canceled" status event
+        let task_id = ctx.task_id;
+        Box::pin(async_stream::stream! {
+            yield Ok(StreamResponse::StatusUpdate(TaskStatusUpdateEvent {
+                task_id,
+                context_id: ctx.context_id,
+                status: TaskStatus {
+                    state: TaskState::Canceled,
+                    message: None,
+                    timestamp: Some(chrono::Utc::now()),
+                },
+                metadata: None,
+            }));
+        })
     }
-
-    async fn create_push_config(&self, _params: &ServiceParams, req: TaskPushNotificationConfig) -> Result<TaskPushNotificationConfig, A2AError> {
-        self.task_store.create_push_config(req).await
-    }
-    async fn get_push_config(&self, _params: &ServiceParams, _req: GetTaskPushNotificationConfigRequest) -> Result<TaskPushNotificationConfig, A2AError> { todo!() }
-    async fn list_push_configs(&self, _params: &ServiceParams, _req: ListTaskPushNotificationConfigsRequest) -> Result<ListTaskPushNotificationConfigsResponse, A2AError> { todo!() }
-    async fn delete_push_config(&self, _params: &ServiceParams, _req: DeleteTaskPushNotificationConfigRequest) -> Result<(), A2AError> { todo!() }
-    async fn get_extended_agent_card(&self, _params: &ServiceParams, _req: GetExtendedAgentCardRequest) -> Result<AgentCard, A2AError> { todo!() }
 }
 
 /// User-facing builder for the A2A server.
@@ -847,27 +906,56 @@ pub struct A2AServerBuilder {
     card: AgentCard,
     bind_addr: SocketAddr,
     default_artifact_name: String,
+    enable_push_notifications: bool,
+    capabilities: AgentCapabilities,
 }
 
 impl A2AServerBuilder {
-    pub fn new(agent: Arc<dyn Agent>, card: AgentCard) -> Self { ... }
-    pub fn bind(mut self, addr: SocketAddr) -> Self { ... }
-    pub fn default_artifact_name(mut self, name: impl Into<String>) -> Self { ... }
+    pub fn new(agent: Arc<dyn Agent>, card: AgentCard) -> Self {
+        Self {
+            agent,
+            card,
+            bind_addr: "0.0.0.0:5000".parse().unwrap(),
+            default_artifact_name: "response".into(),
+            enable_push_notifications: false,
+            capabilities: AgentCapabilities::default(),
+        }
+    }
+    pub fn bind(mut self, addr: SocketAddr) -> Self { self.bind_addr = addr; self }
+    pub fn default_artifact_name(mut self, name: impl Into<String>) -> Self { self.default_artifact_name = name.into(); self }
+    pub fn with_capabilities(mut self, caps: AgentCapabilities) -> Self { self.capabilities = caps; self }
 
+    /// Build an `axum::Router` for the A2A server. Caller is responsible for `serve()`.
+    /// Useful for embedding alongside other axum routes or for testing.
+    pub fn into_router(self) -> axum::Router {
+        let executor = SynapseAgentExecutor::new(self.agent);
+        let handler = DefaultRequestHandler::new(executor, InMemoryTaskStore::new())
+            .with_capabilities(self.capabilities);
+        a2a_server::router::build(handler, self.card)
+    }
+
+    /// Bind and serve on the configured address.
     pub async fn serve(self) -> Result<(), A2AError> {
-        let handler = Arc::new(SynapseAgentHandler {
-            agent: self.agent,
-            task_store: Arc::new(InMemoryTaskStore::new()),
-            default_artifact_name: self.default_artifact_name,
-        });
-        a2a_server::Server::new(handler)
-            .with_agent_card(self.card)
-            .bind(self.bind_addr)
-            .serve()
-            .await
+        let router = self.into_router();
+        let listener = tokio::net::TcpListener::bind(self.bind_addr).await
+            .map_err(|e| A2AError::internal(e.to_string()))?;
+        tracing::info!("A2A server listening on {}", self.bind_addr);
+        axum::serve(listener, router).await
+            .map_err(|e| A2AError::internal(e.to_string()))?;
+        Ok(())
     }
 }
 ```
+
+**Why this design works**:
+- We implement only `AgentExecutor` (2 methods) — the smallest possible surface
+- `DefaultRequestHandler` provides the full 11-method `RequestHandler` impl for free, including:
+  - Task lifecycle (created → working → completed/failed/canceled)
+  - `subscribe_to_task` (with resubscribe via `ExecutionManager`)
+  - Push notification (via `InMemoryPushConfigStore`, when enabled)
+  - `get_extended_agent_card` (returns `unsupported_operation` error by default)
+  - All wire-format concerns (JSON-RPC routing, SSE serialization)
+- This eliminates all 4 `todo!()` stubs from the earlier draft.
 
 ### 9.5 v1 A2A scope (expanded per user decision)
 
@@ -899,13 +987,15 @@ Both `a2a_client` and `a2a_server` (upstream SDK) use `reqwest` and `axum` — b
 
 | File | Action | New state |
 |---|---|---|
-| `src/a2a/card.rs` | **Rewrite** to wrap `a2a::types::AgentCard` | ~50 LoC |
-| `src/a2a/protocol.rs` | **Rewrite** to re-export `a2a` types | ~30 LoC |
+| `src/a2a/card.rs` | **Rewrite** to wrap `a2a::types::AgentCard` (re-export fields; provide Synapse-style builder) | ~80 LoC |
+| `src/a2a/protocol.rs` | **Rewrite** to re-export `a2a` types (JsonRpcRequest, JsonRpcResponse, etc. — only if user code references them) | ~30 LoC |
 | `src/a2a/mod.rs` | **Rewrite** to expose `client`, `server`, `translate` submodules | ~30 LoC |
-| `src/protocol/a2a_adapter.rs` | **Rewrite** as a thin compatibility shim around `A2AClient` (preserves `protocol::AgentAdapter` impl) | ~80 LoC |
+| `src/protocol/a2a_adapter.rs` | **Rewrite** as a thin compatibility shim: wraps `A2AClient` and implements `protocol::AgentAdapter` (existing trait) | ~100 LoC |
 | `src/protocol/mod.rs` | **Keep** `AgentAdapter` trait + `ProtocolAdapterRegistry` | Unchanged |
 
 Public API users (callers of `A2AAdapter::send_task`, `A2AAdapter::get_task`, `A2AAdapter::cancel_task`) **see no breaking changes**.
+
+**Note on a2a-rs `AgentCard` field differences**: The upstream `a2a::types::AgentCard` has 18 fields (including `supported_interfaces`, `default_input_modes`, `default_output_modes`, `documentation_url`, `icon_url`, `security_schemes`, `security_requirements`, `signatures`) that the existing Synapse `AgentCard` lacks. The new wrapper preserves the existing Synapse-style API for backward compat, while also exposing a `.into_a2a_card()` method that fills in the missing fields with sensible defaults.
 
 ## 10. Testing Strategy
 
