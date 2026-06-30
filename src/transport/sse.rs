@@ -203,6 +203,8 @@ pub trait HttpClientSse: HttpClient {
     ) -> Result<SseStream, SseError>;
 }
 
+
+
 #[async_trait]
 impl HttpClientSse for super::native::ReqwestHttpClient {
     async fn sse_post(

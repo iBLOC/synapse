@@ -33,11 +33,58 @@ pub trait BaseChatModel: Send + Sync {
         options: GenerateOptions,
     ) -> ModelResult<crate::schema::Message>;
 
+    /// Legacy streaming entry point: yields full `Message`s as the
+    /// provider streams. New code should prefer [`Self::stream_deltas`].
     async fn stream(
         &self,
         input: Vec<crate::schema::Message>,
         options: GenerateOptions,
     ) -> ModelResult<StreamReader>;
+
+    /// Incremental streaming entry point: yields [`MessageDelta`]s.
+    /// Default implementation buffers the legacy `stream()` and
+    /// constructs deltas; providers SHOULD override for true incremental
+    /// emission.
+    async fn stream_deltas(
+        &self,
+        input: Vec<crate::schema::Message>,
+        options: GenerateOptions,
+    ) -> ModelResult<crate::stream::StreamReader<MessageDelta>> {
+        let legacy = self.stream(input, options).await?;
+        let (writer, reader) = crate::stream::StreamReader::<MessageDelta>::new(64);
+        let cancel = reader.cancel_handle();
+        tokio::spawn(async move {
+            use futures::StreamExt;
+            let mut stream = legacy.into_stream();
+            let mut current = MessageDelta::default();
+            while let Some(item) = stream.next().await {
+                if cancel.is_cancelled() {
+                    return;
+                }
+                if let Ok(msg) = item {
+                    if let crate::schema::Content::Text(text) = msg.content {
+                        let delta_text = if current.content_delta.is_empty() {
+                            text
+                        } else {
+                            // For subsequent messages (rare) just take new
+                            // text. This is a best-effort fallback only.
+                            text
+                        };
+                        current = MessageDelta {
+                            content_delta: delta_text,
+                            tool_call_deltas: Vec::new(),
+                            finish_reason: Some(FinishReason::Stop),
+                            usage: None,
+                        };
+                        if !writer.send_value(current.clone()).await {
+                            return;
+                        }
+                    }
+                }
+            }
+        });
+        Ok(reader)
+    }
 }
 
 pub struct GenerateOptions {
@@ -102,6 +149,15 @@ impl Stream for StreamReader {
             Poll::Ready(item) => Poll::Ready(item),
             Poll::Pending => Poll::Pending,
         }
+    }
+}
+
+impl StreamReader {
+    /// Convert into a boxed `Stream` for use with `futures` combinators.
+    pub fn into_stream(
+        self,
+    ) -> Pin<Box<dyn Stream<Item = Result<crate::schema::Message, ModelError>> + Send>> {
+        Box::pin(self)
     }
 }
 

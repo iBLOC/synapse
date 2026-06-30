@@ -68,6 +68,8 @@ pub mod sse;
 #[cfg(target_arch = "wasm32")]
 pub type DefaultHttpClient = wasi::WasiHttpClient;
 
+pub use sse::HttpClientSse;
+
 impl dyn HttpClient {
     pub async fn post_json<T: serde::Serialize, R: serde::de::DeserializeOwned>(
         &self,

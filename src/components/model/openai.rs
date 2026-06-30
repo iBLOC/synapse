@@ -1,4 +1,4 @@
-use crate::components::model::{BaseChatModel, GenerateOptions, ModelError, StreamReader};
+use crate::components::model::{BaseChatModel, GenerateOptions, MessageDelta, ModelError, StreamReader};
 use crate::schema::Message;
 use async_trait::async_trait;
 #[cfg(not(target_arch = "wasm32"))]
@@ -368,17 +368,17 @@ impl Default for OpenAIChatModelBuilder {
     }
 }
 
-use crate::transport::HttpClient;
+use crate::transport::{HttpClient, HttpClientSse};
 use std::sync::Arc;
 
 pub struct OpenAIModel {
-    http: Arc<dyn HttpClient>,
+    http: Arc<dyn HttpClientSse>,
     api_key: String,
     base_url: String,
 }
 
 impl OpenAIModel {
-    pub fn new(http: Arc<dyn HttpClient>, api_key: impl Into<String>) -> Self {
+    pub fn new(http: Arc<dyn HttpClientSse>, api_key: impl Into<String>) -> Self {
         Self {
             http,
             api_key: api_key.into(),
@@ -413,14 +413,22 @@ impl BaseChatModel for OpenAIModel {
         });
 
         let url = format!("{}/chat/completions", self.base_url);
-        let resp: serde_json::Value = self
+        let body_bytes = serde_json::to_vec(&body).unwrap_or_default();
+        let req = crate::transport::HttpRequest {
+            method: crate::transport::HttpMethod::Post,
+            url: url.clone(),
+            headers: vec![
+                ("Authorization".to_string(), format!("Bearer {}", self.api_key)),
+                ("Content-Type".to_string(), "application/json".to_string()),
+            ],
+            body: Some(body_bytes),
+        };
+        let http_resp = self
             .http
-            .post_json_with_headers(
-                &url,
-                &[("Authorization", &format!("Bearer {}", self.api_key))],
-                &body,
-            )
+            .execute(req)
             .await
+            .map_err(|e| ModelError::Api(e.to_string()))?;
+        let resp: serde_json::Value = serde_json::from_slice(&http_resp.body)
             .map_err(|e| ModelError::Api(e.to_string()))?;
 
         let content = resp["choices"][0]["message"]["content"]
@@ -436,7 +444,287 @@ impl BaseChatModel for OpenAIModel {
         _options: GenerateOptions,
     ) -> Result<StreamReader, ModelError> {
         Err(ModelError::Api(
-            "OpenAIModel::stream not yet implemented".to_string(),
+            "OpenAIModel::stream not yet implemented; use stream_deltas".to_string(),
         ))
+    }
+
+    async fn stream_deltas(
+        &self,
+        messages: Vec<Message>,
+        options: GenerateOptions,
+    ) -> Result<crate::stream::StreamReader<MessageDelta>, ModelError> {
+        use crate::components::model::delta::{FinishReason, MessageDelta, ToolCallDelta};
+        use crate::transport::sse::parse_chunk;
+        use serde_json::Value;
+        use tokio::sync::mpsc;
+
+        let model_name = options
+            .model
+            .clone()
+            .unwrap_or_else(|| "gpt-3.5-turbo".to_string());
+
+        let body = serde_json::json!({
+            "model": model_name,
+            "stream": true,
+            "stream_options": { "include_usage": true },
+            "messages": messages.iter().map(|m| serde_json::json!({
+                "role": m.role.as_str(),
+                "content": match &m.content {
+                    crate::schema::Content::Text(s) => s.clone(),
+                    _ => String::new(),
+                }
+            })).collect::<Vec<_>>(),
+        });
+
+        let url = format!("{}/chat/completions", self.base_url);
+        let http = self.http.clone();
+        let api_key = self.api_key.clone();
+
+        let (writer, reader) = crate::stream::StreamReader::<MessageDelta>::new(64);
+        let cancel = reader.cancel_handle();
+
+        // Run on a separate task; the sse_post stream is consumed in a loop.
+        tokio::spawn(async move {
+            let sse_result = http
+                .sse_post(
+                    &url,
+                    vec![
+                        ("Authorization".to_string(), format!("Bearer {}", api_key)),
+                        ("Content-Type".to_string(), "application/json".to_string()),
+                    ],
+                    serde_json::to_vec(&body).unwrap_or_default(),
+                )
+                .await;
+
+            let mut sse = match sse_result {
+                Ok(s) => s,
+                Err(e) => {
+                    let _ = writer
+                        .send(MessageDelta {
+                            content_delta: String::new(),
+                            tool_call_deltas: Vec::new(),
+                            finish_reason: Some(FinishReason::Error),
+                            usage: None,
+                        })
+                        .await;
+                    let _ = writer
+                        .send(MessageDelta {
+                            content_delta: format!("sse_post failed: {e}"),
+                            tool_call_deltas: Vec::new(),
+                            finish_reason: Some(FinishReason::Error),
+                            usage: None,
+                        })
+                        .await;
+                    return;
+                }
+            };
+
+            let mut state = crate::transport::sse::SseParseState::new();
+            while let Some(event_res) = sse.next().await {
+                if cancel.is_cancelled() {
+                    return;
+                }
+                let event = match event_res {
+                    Ok(e) => e,
+                    Err(e) => {
+                        let _ = writer
+                            .send(MessageDelta {
+                                content_delta: format!("sse error: {e}"),
+                                tool_call_deltas: Vec::new(),
+                                finish_reason: Some(FinishReason::Error),
+                                usage: None,
+                            })
+                            .await;
+                        return;
+                    }
+                };
+
+                for ev in parse_chunk(event.data.as_bytes(), &mut state) {
+                    if ev.data.trim().is_empty() || ev.data.trim() == "[DONE]" {
+                        if ev.data.trim() == "[DONE]" {
+                            let _ = writer
+                                .send(MessageDelta {
+                                    content_delta: String::new(),
+                                    tool_call_deltas: Vec::new(),
+                                    finish_reason: Some(FinishReason::Stop),
+                                    usage: None,
+                                })
+                                .await;
+                        }
+                        continue;
+                    }
+                    let parsed: Value = match serde_json::from_str(&ev.data) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    };
+                    let delta = parse_openai_stream_chunk(&parsed);
+                    if !writer.send(delta).await {
+                        return;
+                    }
+                }
+            }
+        });
+
+        Ok(reader)
+    }
+}
+
+fn parse_openai_stream_chunk(v: &serde_json::Value) -> crate::components::model::delta::MessageDelta {
+    use crate::components::model::delta::{FinishReason, MessageDelta, ToolCallDelta, Usage};
+
+    let mut content_delta = String::new();
+    let mut tool_call_deltas: Vec<ToolCallDelta> = Vec::new();
+    let mut finish_reason: Option<FinishReason> = None;
+    let mut usage: Option<Usage> = None;
+
+    if let Some(choices) = v.get("choices").and_then(|c| c.as_array()) {
+        for choice in choices {
+            if let Some(delta) = choice.get("delta") {
+                if let Some(c) = delta.get("content").and_then(|c| c.as_str()) {
+                    content_delta.push_str(c);
+                }
+                if let Some(tcs) = delta.get("tool_calls").and_then(|t| t.as_array()) {
+                    for tc in tcs {
+                        let index = tc
+                            .get("index")
+                            .and_then(|i| i.as_u64())
+                            .unwrap_or(0) as usize;
+                        let id = tc
+                            .get("id")
+                            .and_then(|i| i.as_str())
+                            .map(String::from);
+                        let name = tc
+                            .get("function")
+                            .and_then(|f| f.get("name"))
+                            .and_then(|n| n.as_str())
+                            .map(String::from);
+                        let arguments_delta = tc
+                            .get("function")
+                            .and_then(|f| f.get("arguments"))
+                            .and_then(|a| a.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        tool_call_deltas.push(ToolCallDelta {
+                            index,
+                            id,
+                            name,
+                            arguments_delta,
+                        });
+                    }
+                }
+            }
+            if let Some(fr) = choice.get("finish_reason").and_then(|f| f.as_str()) {
+                finish_reason = Some(match fr {
+                    "stop" => FinishReason::Stop,
+                    "tool_calls" => FinishReason::ToolCalls,
+                    "length" => FinishReason::Length,
+                    "content_filter" => FinishReason::ContentFilter,
+                    _ => FinishReason::Error,
+                });
+            }
+        }
+    }
+
+    if let Some(u) = v.get("usage") {
+        usage = Some(Usage {
+            input_tokens: u.get("prompt_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
+            output_tokens: u.get("completion_tokens").and_then(|x| x.as_u64()).unwrap_or(0)
+                as u32,
+            cached_input_tokens: u
+                .get("prompt_tokens_details")
+                .and_then(|d| d.get("cached_tokens"))
+                .and_then(|x| x.as_u64())
+                .unwrap_or(0) as u32,
+        });
+    }
+
+    MessageDelta {
+        content_delta,
+        tool_call_deltas,
+        finish_reason,
+        usage,
+    }
+}
+
+#[cfg(test)]
+mod delta_parser_tests {
+    use super::*;
+    use crate::components::model::delta::FinishReason;
+
+    #[test]
+    fn parses_text_delta() {
+        let v = serde_json::json!({
+            "choices": [{
+                "delta": {"content": "Hello"}
+            }]
+        });
+        let d = parse_openai_stream_chunk(&v);
+        assert_eq!(d.content_delta, "Hello");
+        assert!(d.tool_call_deltas.is_empty());
+        assert!(d.finish_reason.is_none());
+    }
+
+    #[test]
+    fn parses_tool_call_delta() {
+        let v = serde_json::json!({
+            "choices": [{
+                "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "id": "call_123",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": "{\"loc"
+                        }
+                    }]
+                }
+            }]
+        });
+        let d = parse_openai_stream_chunk(&v);
+        assert_eq!(d.content_delta, "");
+        assert_eq!(d.tool_call_deltas.len(), 1);
+        assert_eq!(d.tool_call_deltas[0].index, 0);
+        assert_eq!(d.tool_call_deltas[0].id.as_deref(), Some("call_123"));
+        assert_eq!(d.tool_call_deltas[0].name.as_deref(), Some("get_weather"));
+        assert_eq!(d.tool_call_deltas[0].arguments_delta, "{\"loc");
+    }
+
+    #[test]
+    fn parses_finish_reason() {
+        let v = serde_json::json!({
+            "choices": [{
+                "delta": {},
+                "finish_reason": "tool_calls"
+            }]
+        });
+        let d = parse_openai_stream_chunk(&v);
+        assert_eq!(d.finish_reason, Some(FinishReason::ToolCalls));
+    }
+
+    #[test]
+    fn parses_usage_when_present() {
+        let v = serde_json::json!({
+            "choices": [{"delta": {}}],
+            "usage": {
+                "prompt_tokens": 12,
+                "completion_tokens": 34,
+                "prompt_tokens_details": {"cached_tokens": 5}
+            }
+        });
+        let d = parse_openai_stream_chunk(&v);
+        let u = d.usage.expect("usage should be set");
+        assert_eq!(u.input_tokens, 12);
+        assert_eq!(u.output_tokens, 34);
+        assert_eq!(u.cached_input_tokens, 5);
+    }
+
+    #[test]
+    fn missing_fields_yield_empty_delta() {
+        let v = serde_json::json!({});
+        let d = parse_openai_stream_chunk(&v);
+        assert!(d.content_delta.is_empty());
+        assert!(d.tool_call_deltas.is_empty());
+        assert!(d.finish_reason.is_none());
+        assert!(d.usage.is_none());
     }
 }

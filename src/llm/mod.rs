@@ -21,7 +21,7 @@
 //! # }
 //! ```
 
-use crate::transport::{DefaultHttpClient, HttpClient};
+use crate::transport::{DefaultHttpClient, HttpClient, HttpClientSse};
 use std::sync::Arc;
 
 pub mod anthropic;
@@ -30,6 +30,6 @@ pub mod openai;
 pub use anthropic::AnthropicClient;
 pub use openai::OpenAIClient;
 
-pub fn create_default_http_client() -> Arc<dyn HttpClient> {
+pub fn create_default_http_client() -> Arc<dyn HttpClientSse> {
     Arc::new(DefaultHttpClient::new())
 }
