@@ -5,7 +5,7 @@ pub mod react;
 
 pub type AgentResult<T> = Result<T, AgentError>;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum AgentError {
     #[error("agent error: {0}")]
     Agent(String),

@@ -4,6 +4,9 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::sync::mpsc;
 
+pub mod delta;
+pub use delta::{FinishReason, MessageDelta, ToolCallDelta, Usage};
+
 pub type ModelResult<T> = Result<T, ModelError>;
 
 #[derive(Debug, thiserror::Error, Clone)]
