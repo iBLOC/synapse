@@ -1,10 +1,12 @@
-use crate::adk::agent::{Agent, AgentError, AgentEvent, AgentInput, AgentOutput};
-use crate::components::model::{BaseChatModel, GenerateOptions};
+use crate::adk::agent::{Agent, AgentError, AgentEvent, AgentInput, AgentOutput, AgentStream, AgentStreamEvent};
+use crate::components::model::{BaseChatModel, FinishReason, GenerateOptions, MessageDelta};
 use crate::components::tool::{BaseTool, EnhancedInvokableTool, InvokableTool, ToolError};
 use crate::schema::{Content, Message, RoleType, ToolArgument, ToolCall, ToolInfo, ToolResult};
 use crate::skills::{SkillContext, SkillError, SkillManager};
 use async_trait::async_trait;
+use futures::StreamExt;
 use std::sync::Arc;
+use std::time::Instant;
 
 /// ToolMiddleware provides pre/post hooks for tool execution.
 /// This allows tools to be wrapped with logging, tracing, error handling, etc.
@@ -161,6 +163,172 @@ impl<M: BaseChatModel + 'static, T: InvokableTool + 'static> ChatModelAgent<M, T
         infos
     }
 
+    pub async fn run_loop_streaming(
+        &self,
+        messages: Vec<Message>,
+    ) -> Result<AgentStream, AgentError> {
+        let (writer, reader) = crate::stream::StreamReader::<AgentStreamEvent>::new(128);
+        let cancel = reader.cancel_handle();
+
+        let mut current_messages = messages;
+        if let Some(prompt) = &self.system_prompt {
+            current_messages.insert(0, Message::system(prompt.clone()));
+        }
+
+        let tool_infos = self.get_tool_infos().await;
+        let agent_name = self.name.clone();
+        let model = self.model.clone();
+        let tools = self.tools.clone();
+        let tool_middleware = self.tool_middleware.clone();
+        let max_iterations = self.max_iterations;
+        let options = GenerateOptions {
+            temperature: self.temperature,
+            tools: Some(tool_infos),
+            ..Default::default()
+        };
+
+        tokio::spawn(async move {
+            let mut iterations: usize = 0;
+            loop {
+                if cancel.is_cancelled() {
+                    return;
+                }
+                if iterations >= 100 {
+                    let _ = writer
+                        .send(AgentStreamEvent::Error {
+                            agent: agent_name.clone(),
+                            error: AgentError::MaxIterationsExceeded,
+                        })
+                        .await;
+                    return;
+                }
+                iterations += 1;
+                let _ = writer
+                    .send(AgentStreamEvent::StepTransition {
+                        agent: agent_name.clone(),
+                        from: "iter_end".into(),
+                        to: "model_call".into(),
+                        step: iterations,
+                    })
+                    .await;
+
+                let model_stream_res = model
+                    .stream_deltas(current_messages.clone(), options.clone())
+                    .await;
+                let mut stream = match model_stream_res {
+                    Ok(s) => s,
+                    Err(e) => {
+                        let _ = writer
+                            .send(AgentStreamEvent::Error {
+                                agent: agent_name.clone(),
+                                error: AgentError::Agent(e.to_string()),
+                            })
+                            .await;
+                        return;
+                    }
+                };
+
+                let mut msg = Message::assistant("");
+                while let Some(delta_res) = stream.next().await {
+                    if cancel.is_cancelled() {
+                        return;
+                    }
+                    if !delta_res.content_delta.is_empty() {
+                        let _ = writer
+                            .send(AgentStreamEvent::TokenDelta {
+                                agent: agent_name.clone(),
+                                delta: delta_res.content_delta.clone(),
+                            })
+                            .await;
+                        if let Content::Text(ref mut text) = msg.content {
+                            text.push_str(&delta_res.content_delta);
+                        }
+                    }
+                    for tc_d in &delta_res.tool_call_deltas {
+                        merge_tool_call_delta(&mut msg, tc_d.clone());
+                    }
+                    if matches!(delta_res.finish_reason, Some(FinishReason::Error)) {
+                        let _ = writer
+                            .send(AgentStreamEvent::Error {
+                                agent: agent_name.clone(),
+                                error: AgentError::Agent("stream error".into()),
+                            })
+                            .await;
+                        return;
+                    }
+                }
+                current_messages.push(msg.clone());
+
+                if let Some(calls) = msg.tool_calls.clone() {
+                    if iterations >= max_iterations {
+                        let _ = writer
+                            .send(AgentStreamEvent::Error {
+                                agent: agent_name.clone(),
+                                error: AgentError::MaxIterationsExceeded,
+                            })
+                            .await;
+                        return;
+                    }
+                    for call in calls {
+                        let _ = writer
+                            .send(AgentStreamEvent::ToolStart {
+                                agent: agent_name.clone(),
+                                name: call.function.name.clone(),
+                                args: call.function.arguments.clone(),
+                            })
+                            .await;
+                        let start = Instant::now();
+                        let result = execute_tool(
+                            &tools,
+                            &tool_middleware,
+                            &call,
+                        )
+                        .await;
+                        let latency_ms = start.elapsed().as_millis() as u64;
+                        match result {
+                            Ok(result_text) => {
+                                let _ = writer
+                                    .send(AgentStreamEvent::ToolEnd {
+                                        agent: agent_name.clone(),
+                                        name: call.function.name.clone(),
+                                        result: result_text.clone(),
+                                        latency_ms,
+                                    })
+                                    .await;
+                                current_messages.push(Message {
+                                    role: RoleType::Tool,
+                                    content: Content::Text(result_text),
+                                    name: None,
+                                    tool_call_id: Some(call.id.clone()),
+                                    tool_calls: None,
+                                });
+                            }
+                            Err(e) => {
+                                let _ = writer
+                                    .send(AgentStreamEvent::Error {
+                                        agent: agent_name.clone(),
+                                        error: e,
+                                    })
+                                    .await;
+                                return;
+                            }
+                        }
+                    }
+                } else {
+                    let _ = writer
+                        .send(AgentStreamEvent::Final {
+                            agent: agent_name.clone(),
+                            message: msg,
+                        })
+                        .await;
+                    return;
+                }
+            }
+        });
+
+        Ok(reader)
+    }
+
     pub async fn run_loop(&self, messages: Vec<Message>) -> Result<AgentEvent, AgentError> {
         let mut iterations = 0;
         let mut current_messages = messages;
@@ -274,6 +442,26 @@ impl<M: BaseChatModel + Send + Sync + 'static, T: InvokableTool + Send + Sync + 
         self.run_loop(input.messages).await
     }
 
+    async fn stream_run(&self, input: AgentInput) -> AgentStream {
+        match self.run_loop_streaming(input.messages).await {
+            Ok(stream) => stream,
+            Err(e) => {
+                let (writer, reader) =
+                    crate::stream::StreamReader::<AgentStreamEvent>::new(8);
+                let name = self.name.clone();
+                tokio::spawn(async move {
+                    let _ = writer
+                        .send(AgentStreamEvent::Error {
+                            agent: name,
+                            error: e,
+                        })
+                        .await;
+                });
+                reader
+            }
+        }
+    }
+
     async fn resume(
         &self,
         _checkpoint: Vec<u8>,
@@ -281,6 +469,65 @@ impl<M: BaseChatModel + Send + Sync + 'static, T: InvokableTool + Send + Sync + 
     ) -> Result<AgentEvent, AgentError> {
         Err(AgentError::Agent("Resume not implemented".to_string()))
     }
+}
+
+fn merge_tool_call_delta(msg: &mut Message, tc_d: crate::components::model::ToolCallDelta) {
+    use crate::schema::{FunctionCall, ToolCall};
+    let calls = msg.tool_calls.get_or_insert_with(Vec::new);
+    while calls.len() <= tc_d.index {
+        calls.push(ToolCall {
+            id: String::new(),
+            tool_type: "function".to_string(),
+            function: FunctionCall {
+                name: String::new(),
+                arguments: String::new(),
+            },
+        });
+    }
+    let slot = &mut calls[tc_d.index];
+    if let Some(id) = &tc_d.id {
+        slot.id = id.clone();
+    }
+    if let Some(name) = &tc_d.name {
+        slot.function.name = name.clone();
+    }
+    slot.function.arguments.push_str(&tc_d.arguments_delta);
+}
+
+async fn execute_tool<T: InvokableTool + Send + Sync + 'static>(
+    tools: &[Arc<T>],
+    tool_middleware: &[Arc<dyn ToolMiddleware>],
+    tool_call: &ToolCall,
+) -> Result<String, AgentError> {
+    let tool_name = &tool_call.function.name;
+    let args = &tool_call.function.arguments;
+    for tool in tools {
+        let info = tool
+            .info()
+            .await
+            .map_err(|e| AgentError::ToolError(e.to_string()))?;
+        if info.name == *tool_name {
+            for mw in tool_middleware {
+                if let Err(e) = mw.before_tool(tool_name, args) {
+                    tracing::warn!("tool middleware before_tool failed: {}", e);
+                }
+            }
+            let result = tool
+                .invoke(tool_call.function.arguments.clone())
+                .await
+                .map_err(|e| AgentError::ToolError(e.to_string()))?;
+            for mw in tool_middleware.iter().rev() {
+                if let Err(e) = mw.after_tool(tool_name, &result) {
+                    tracing::warn!("tool middleware after_tool failed: {}", e);
+                }
+            }
+            return Ok(result);
+        }
+    }
+    Err(AgentError::ToolError(format!(
+        "Tool {} not found",
+        tool_name
+    )))
 }
 
 pub struct SimpleTool {

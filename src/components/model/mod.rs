@@ -109,6 +109,19 @@ impl Default for GenerateOptions {
     }
 }
 
+impl Clone for GenerateOptions {
+    fn clone(&self) -> Self {
+        Self {
+            model: self.model.clone(),
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
+            top_p: self.top_p,
+            tools: self.tools.clone(),
+            tool_choice: self.tool_choice.clone(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum ToolChoice {
     Auto,
