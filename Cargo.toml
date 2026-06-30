@@ -36,6 +36,9 @@ chrono = { version = "0.4", features = ["serde"] }
 # Pin for async futures
 pin-project = "1"
 
+# Bytes type for streaming bodies
+bytes = "1"
+
 # Type utilities
 dashmap = "5"
 
@@ -58,7 +61,7 @@ default = []
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["full", "sync"] }
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }
