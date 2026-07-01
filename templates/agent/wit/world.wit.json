@@ -1,0 +1,18 @@
+{
+  "$schema": "../../wit/synapse-host.wit",
+  "world": {
+    "imports": {
+      "wasi:http/outgoing-handler": {},
+      "synapse:host/get_config": {},
+      "synapse:host/a2a-call": {}
+    },
+    "exports": {
+      "synapse-abi-version": "func() -> s32",
+      "agent-card":         "func(out-ptr: s32) -> s32",
+      "stream-run":         "func(input-ptr: s32, input-len: s32, out-handle-ptr: s32) -> s32",
+      "cancel-run":         "func(handle: s32) -> s32",
+      "query-task":         "func(task-id-ptr: s32, task-id-len: s32, out-ptr: s32) -> s32",
+      "subscribe-task":     "func(task-id-ptr: s32, task-id-len: s32, out-handle-ptr: s32) -> s32"
+    }
+  }
+}
