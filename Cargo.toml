@@ -59,10 +59,11 @@ a2a-server-lf = "0.4"
 a2a-client-lf = "0.2"
 
 # HTTP server (for A2A server)
-axum = "0.7"
+axum = "0.8"
 
 # Async stream utilities
 async-stream = "0.3"
+tokio-stream = "0.1"
 
 [dev-dependencies]
 tokio-test = "0.4"
@@ -73,7 +74,7 @@ default = []
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1", features = ["full", "sync"] }
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { version = "0.13", features = ["json", "stream"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }

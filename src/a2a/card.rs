@@ -53,6 +53,55 @@ impl AgentCard {
         self.skills = Some(skills);
         self
     }
+
+    /// Convert to the a2a-rs SDK's AgentCard type.
+    pub fn into_a2a_card(self) -> a2a::AgentCard {
+        a2a::AgentCard {
+            name: self.name,
+            description: self.description,
+            version: self.version,
+            supported_interfaces: vec![], // TODO: map interfaces
+            capabilities: a2a::AgentCapabilities {
+                streaming: Some(self.capabilities.streaming),
+                push_notifications: Some(self.capabilities.push_notifications),
+                extensions: None,
+                extended_agent_card: None,
+            },
+            default_input_modes: vec!["text/plain".to_string()],
+            default_output_modes: vec!["text/plain".to_string()],
+            skills: vec![], // TODO: map skills
+            provider: self.provider.map(|p| a2a::AgentProvider {
+                organization: p.organization,
+                url: p.url.unwrap_or_default(),
+            }),
+            documentation_url: None,
+            icon_url: None,
+            security_schemes: None,
+            security_requirements: None,
+            signatures: None,
+        }
+    }
+
+    /// Convert from the a2a-rs SDK's AgentCard type.
+    pub fn from_a2a_card(card: a2a::AgentCard) -> Self {
+        Self {
+            name: card.name,
+            description: card.description,
+            url: String::new(), // SDK doesn't have url field
+            version: card.version,
+            provider: card.provider.map(|p| Provider {
+                organization: p.organization,
+                url: Some(p.url),
+            }),
+            capabilities: Capabilities {
+                streaming: card.capabilities.streaming.unwrap_or(false),
+                push_notifications: card.capabilities.push_notifications.unwrap_or(false),
+                state_transition_history: false, // SDK doesn't have this field
+            },
+            authentication: None, // TODO: map authentication
+            skills: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

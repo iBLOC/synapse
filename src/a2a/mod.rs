@@ -2,6 +2,12 @@ pub mod card;
 pub mod protocol;
 
 #[cfg(not(target_arch = "wasm32"))]
+pub mod server;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub mod client;
+
+#[cfg(not(target_arch = "wasm32"))]
 use card::AgentCard;
 #[cfg(not(target_arch = "wasm32"))]
 use protocol::{

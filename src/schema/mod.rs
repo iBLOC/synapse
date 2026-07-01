@@ -132,6 +132,59 @@ impl Message {
             tool_calls: None,
         }
     }
+
+    /// Convert to the a2a-rs SDK's Message type.
+    pub fn into_a2a_message(self) -> a2a::Message {
+        let role = match self.role {
+            RoleType::User => a2a::Role::User,
+            RoleType::Assistant => a2a::Role::Agent,
+            RoleType::System => a2a::Role::User, // SDK doesn't have System
+            RoleType::Tool => a2a::Role::User,   // SDK doesn't have Tool
+        };
+
+        let parts = match self.content {
+            Content::Text(text) => vec![a2a::Part::text(text)],
+            _ => vec![], // TODO: map other content types
+        };
+
+        a2a::Message {
+            message_id: format!("msg-{}", uuid::Uuid::new_v4()),
+            context_id: None,
+            task_id: None,
+            role,
+            parts,
+            metadata: None,
+            extensions: None,
+            reference_task_ids: None,
+        }
+    }
+
+    /// Convert from the a2a-rs SDK's Message type.
+    pub fn from_a2a_message(msg: a2a::Message) -> Self {
+        let role = match msg.role {
+            a2a::Role::User => RoleType::User,
+            a2a::Role::Agent => RoleType::Assistant,
+            a2a::Role::Unspecified => RoleType::User,
+        };
+
+        let content = msg
+            .parts
+            .into_iter()
+            .filter_map(|p| match p.content {
+                a2a::PartContent::Text(text) => Some(text),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        Self {
+            role,
+            content: Content::Text(content),
+            name: None,
+            tool_call_id: None,
+            tool_calls: None,
+        }
+    }
 }
 
 impl From<String> for Content {

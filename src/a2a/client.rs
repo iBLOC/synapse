@@ -1,0 +1,201 @@
+//! A2A client wrapper — adapts the a2a-rs SDK to Synapse's streaming API.
+
+use std::sync::Arc;
+
+use a2a_client::{A2AClient as SdkClient, jsonrpc::JsonRpcTransport};
+use futures::StreamExt;
+
+use crate::adk::agent::AgentStreamEvent;
+use crate::a2a::AgentCard;
+use crate::schema::Message;
+
+pub struct A2AClient {
+    sdk_client: Arc<SdkClient<JsonRpcTransport>>,
+    peer_url: String,
+}
+
+impl A2AClient {
+    pub async fn new(peer_url: &str) -> Result<Self, a2a::A2AError> {
+        let client = reqwest::Client::new();
+        let transport = JsonRpcTransport::new(client, peer_url.to_string());
+        let sdk_client = Arc::new(SdkClient::new(transport));
+        Ok(Self {
+            sdk_client,
+            peer_url: peer_url.to_string(),
+        })
+    }
+
+    /// Send a message to the remote agent and stream back events.
+    pub async fn send_message_stream(
+        &self,
+        message: Message,
+    ) -> Result<crate::stream::StreamReader<AgentStreamEvent>, a2a::A2AError> {
+        let (tx, rx) = crate::stream::StreamReader::new(32);
+
+        let sdk_client = self.sdk_client.clone();
+        let peer_url = self.peer_url.clone();
+
+        tokio::spawn(async move {
+            let request = a2a::SendMessageRequest {
+                message: message.into_a2a_message(),
+                configuration: None,
+                metadata: None,
+                tenant: None,
+            };
+
+            let mut stream = match sdk_client.send_streaming_message(&request).await {
+                Ok(s) => s,
+                Err(e) => {
+                    let _ = tx.send(AgentStreamEvent::Error {
+                        agent: peer_url.clone(),
+                        error: crate::adk::agent::AgentError::Agent(format!(
+                            "A2A send failed: {}",
+                            e
+                        )),
+                    }).await;
+                    return;
+                }
+            };
+
+            while let Some(response) = stream.next().await {
+                match response {
+                    Ok(stream_response) => {
+                        let events = translate_a2a_response_to_agent_events(
+                            stream_response,
+                            &peer_url,
+                        );
+                        for event in events {
+                            if !tx.send(event).await {
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(AgentStreamEvent::Error {
+                            agent: peer_url.clone(),
+                            error: crate::adk::agent::AgentError::Agent(format!(
+                                "A2A stream error: {}",
+                                e
+                            )),
+                        }).await;
+                        return;
+                    }
+                }
+            }
+        });
+
+        Ok(rx)
+    }
+
+    /// Send a message and wait for a complete response (non-streaming).
+    pub async fn send_message(
+        &self,
+        message: Message,
+    ) -> Result<Message, a2a::A2AError> {
+        let request = a2a::SendMessageRequest {
+            message: message.into_a2a_message(),
+            configuration: None,
+            metadata: None,
+            tenant: None,
+        };
+
+        let response = self.sdk_client.send_message(&request).await?;
+
+        match response {
+            a2a::SendMessageResponse::Task(task) => {
+                task.history
+                    .and_then(|h| h.into_iter().last())
+                    .map(Message::from_a2a_message)
+                    .ok_or_else(|| a2a::A2AError::new(-1, "No message in task"))
+            }
+            a2a::SendMessageResponse::Message(msg) => Ok(Message::from_a2a_message(msg)),
+        }
+    }
+
+    /// Get the extended agent card of the remote peer (not yet supported in SDK).
+    pub async fn get_agent_card(&self) -> Result<AgentCard, a2a::A2AError> {
+        // SDK doesn't expose a plain get_agent_card; use the well-known URL path
+        // via reqwest directly for now.
+        let url = format!("{}/.well-known/agent-card.json", self.peer_url);
+        let resp = reqwest::Client::new()
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| a2a::A2AError::new(-1, format!("HTTP error: {}", e)))?;
+        let card: a2a::AgentCard = resp
+            .json()
+            .await
+            .map_err(|e| a2a::A2AError::new(-1, format!("JSON parse error: {}", e)))?;
+        Ok(AgentCard::from_a2a_card(card))
+    }
+}
+
+fn translate_a2a_response_to_agent_events(
+    response: a2a::StreamResponse,
+    peer_url: &str,
+) -> Vec<AgentStreamEvent> {
+    use a2a::StreamResponse;
+
+    match response {
+        StreamResponse::Task(_) | StreamResponse::Message(_) => Vec::new(),
+        StreamResponse::ArtifactUpdate(event) => {
+            let mut events = Vec::new();
+
+            for part in &event.artifact.parts {
+                match &part.content {
+                    a2a::PartContent::Text(text) => {
+                        events.push(AgentStreamEvent::TokenDelta {
+                            agent: peer_url.to_string(),
+                            delta: text.clone(),
+                        });
+                    }
+                    a2a::PartContent::Raw(_) | a2a::PartContent::Url(_) | a2a::PartContent::Data(_) => {}
+                }
+            }
+
+            if event.last_chunk.unwrap_or(false) {
+                let content = event
+                    .artifact
+                    .parts
+                    .iter()
+                    .filter_map(|p| match &p.content {
+                        a2a::PartContent::Text(s) => Some(s.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join("");
+
+                events.push(AgentStreamEvent::Final {
+                    agent: peer_url.to_string(),
+                    message: Message::assistant(content),
+                });
+            }
+
+            events
+        }
+        StreamResponse::StatusUpdate(event) => {
+            let mut events = Vec::new();
+
+            if event.status.state == a2a::TaskState::Failed {
+                let error_msg = event
+                    .status
+                    .message
+                    .map(|m| {
+                        let schema_msg = crate::schema::Message::from_a2a_message(m);
+                        match schema_msg.content {
+                            crate::schema::Content::Text(s) => s,
+                            _ => "Unknown error".to_string(),
+                        }
+                    })
+                    .unwrap_or_else(|| "Unknown error".to_string());
+
+                events.push(AgentStreamEvent::Error {
+                    agent: peer_url.to_string(),
+                    error: crate::adk::agent::AgentError::Agent(error_msg),
+                });
+            }
+
+            events
+        }
+    }
+}

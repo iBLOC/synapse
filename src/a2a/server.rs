@@ -13,15 +13,7 @@ use tokio::sync::mpsc;
 
 use crate::adk::agent::{Agent, AgentInput, AgentStreamEvent};
 use crate::a2a::AgentCard;
-use crate::schema::Message;
 
-/// Adapts a Synapse [`Agent`] to the a2a-rs [`AgentExecutor`] trait.
-///
-/// The executor is the bridge between the A2A protocol layer (a2a-rs SDK)
-/// and the agent's internal execution model. When an A2A client sends a
-/// `message/send` or `message/stream` request, the SDK invokes
-/// [`execute`](AgentExecutor::execute) on this executor, which in turn
-/// calls the agent's `stream_run` method.
 pub struct SynapseAgentExecutor {
     agent: Arc<dyn Agent>,
 }
@@ -35,17 +27,20 @@ impl SynapseAgentExecutor {
 
 #[async_trait]
 impl AgentExecutor for SynapseAgentExecutor {
-    async fn execute(
+    fn execute(
         &self,
-        task_id: String,
-        context_id: String,
-        message: Message,
-        _metadata: Option<serde_json::Value>,
-    ) -> BoxStream<'static, Result<a2a::StreamResponse, a2a::Error>> {
+        ctx: a2a_server::ExecutorContext,
+    ) -> BoxStream<'static, Result<a2a::StreamResponse, a2a::A2AError>> {
         let agent = self.agent.clone();
         let (tx, rx) = mpsc::channel(32);
 
-        // Spawn the agent's streaming execution
+        let task_id = ctx.task_id.clone();
+        let context_id = ctx.context_id.clone();
+        let message: crate::schema::Message = ctx
+            .message
+            .map(crate::schema::Message::from_a2a_message)
+            .unwrap_or_else(|| crate::schema::Message::user(""));
+
         tokio::spawn(async move {
             let input = AgentInput {
                 messages: vec![message],
@@ -65,24 +60,27 @@ impl AgentExecutor for SynapseAgentExecutor {
         Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
     }
 
-    async fn cancel(
+    fn cancel(
         &self,
-        task_id: String,
-        context_id: String,
-    ) -> Result<a2a::Task, a2a::Error> {
-        // For now, return a canceled task. Future: propagate cancellation to agent.
-        Ok(a2a::Task {
-            id: task_id,
-            context_id,
-            status: a2a::TaskStatus {
-                state: a2a::TaskState::Canceled,
-                message: None,
-                timestamp: chrono::Utc::now(),
-            },
-            history: None,
-            artifacts: None,
-            metadata: None,
-        })
+        ctx: a2a_server::ExecutorContext,
+    ) -> BoxStream<'static, Result<a2a::StreamResponse, a2a::A2AError>> {
+        let task_id = ctx.task_id;
+        let context_id = ctx.context_id;
+
+        let stream = async_stream::stream! {
+            yield Ok(a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
+                task_id,
+                context_id,
+                status: a2a::TaskStatus {
+                    state: a2a::TaskState::Canceled,
+                    message: None,
+                    timestamp: Some(chrono::Utc::now()),
+                },
+                metadata: None,
+            }));
+        };
+
+        Box::pin(stream)
     }
 }
 
@@ -92,95 +90,102 @@ fn translate_agent_event_to_a2a(
     task_id: &str,
     context_id: &str,
 ) -> a2a::StreamResponse {
-    use a2a::{ArtifactUpdateEvent, Part, StatusUpdateEvent, TaskStatus};
+    use a2a::TaskArtifactUpdateEvent;
+
+    let now = Some(chrono::Utc::now());
+    let empty_artifact_id = String::new();
 
     match event {
         AgentStreamEvent::TokenDelta { agent: _, delta } => {
-            // Emit as an artifact update with append=true
-            a2a::StreamResponse::ArtifactUpdate(ArtifactUpdateEvent {
+            a2a::StreamResponse::ArtifactUpdate(TaskArtifactUpdateEvent {
                 task_id: task_id.to_string(),
                 context_id: context_id.to_string(),
                 artifact: a2a::Artifact {
+                    artifact_id: empty_artifact_id.clone(),
                     name: Some("response".to_string()),
-                    parts: vec![Part::Text(delta)],
+                    description: None,
+                    parts: vec![a2a::Part::text(delta)],
                     metadata: None,
+                    extensions: None,
                 },
-                append: true,
-                last_chunk: false,
+                append: Some(true),
+                last_chunk: Some(false),
                 metadata: None,
             })
         }
         AgentStreamEvent::ToolStart { agent: _, name, args } => {
-            // Emit as a status update with working state
-            let msg = format!("Calling tool: {}({})", name, args);
-            a2a::StreamResponse::StatusUpdate(StatusUpdateEvent {
+            let text = format!("Calling tool: {}({})", name, args);
+            let schema_msg = crate::schema::Message::assistant(text);
+            a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
                 task_id: task_id.to_string(),
                 context_id: context_id.to_string(),
-                status: TaskStatus {
+                status: a2a::TaskStatus {
                     state: a2a::TaskState::Working,
-                    message: Some(Message::assistant(msg)),
-                    timestamp: chrono::Utc::now(),
+                    message: Some(schema_msg.into_a2a_message()),
+                    timestamp: now,
                 },
                 metadata: None,
             })
         }
         AgentStreamEvent::ToolEnd { agent: _, name, result, latency_ms } => {
-            let msg = format!("Tool {} returned: {} ({}ms)", name, result, latency_ms);
-            a2a::StreamResponse::StatusUpdate(StatusUpdateEvent {
+            let text = format!("Tool {} returned: {} ({}ms)", name, result, latency_ms);
+            let schema_msg = crate::schema::Message::assistant(text);
+            a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
                 task_id: task_id.to_string(),
                 context_id: context_id.to_string(),
-                status: TaskStatus {
+                status: a2a::TaskStatus {
                     state: a2a::TaskState::Working,
-                    message: Some(Message::assistant(msg)),
-                    timestamp: chrono::Utc::now(),
+                    message: Some(schema_msg.into_a2a_message()),
+                    timestamp: now,
                 },
                 metadata: None,
             })
         }
         AgentStreamEvent::Final { agent: _, message } => {
-            // Emit final artifact + completed status
             let content = match &message.content {
                 crate::schema::Content::Text(s) => s.clone(),
                 _ => String::new(),
             };
-            a2a::StreamResponse::ArtifactUpdate(ArtifactUpdateEvent {
+            a2a::StreamResponse::ArtifactUpdate(TaskArtifactUpdateEvent {
                 task_id: task_id.to_string(),
                 context_id: context_id.to_string(),
                 artifact: a2a::Artifact {
+                    artifact_id: empty_artifact_id.clone(),
                     name: Some("response".to_string()),
-                    parts: vec![Part::Text(content)],
+                    description: None,
+                    parts: vec![a2a::Part::text(content)],
                     metadata: None,
+                    extensions: None,
                 },
-                append: false,
-                last_chunk: true,
+                append: Some(false),
+                last_chunk: Some(true),
                 metadata: None,
             })
         }
         AgentStreamEvent::Error { agent: _, error } => {
-            let msg = format!("Agent error: {}", error);
-            a2a::StreamResponse::StatusUpdate(StatusUpdateEvent {
+            let text = format!("Agent error: {}", error);
+            let schema_msg = crate::schema::Message::assistant(text);
+            a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
                 task_id: task_id.to_string(),
                 context_id: context_id.to_string(),
-                status: TaskStatus {
+                status: a2a::TaskStatus {
                     state: a2a::TaskState::Failed,
-                    message: Some(Message::assistant(msg)),
-                    timestamp: chrono::Utc::now(),
+                    message: Some(schema_msg.into_a2a_message()),
+                    timestamp: now,
                 },
                 metadata: None,
             })
         }
-        // Other events (StepTransition, RouteDecision, Handoff) are internal
-        // observability; not exposed to A2A wire protocol.
         _ => {
-            // Emit as a working status update with a description
             let desc = format!("{:?}", event);
-            a2a::StreamResponse::StatusUpdate(StatusUpdateEvent {
+            let schema_msg = crate::schema::Message::assistant(desc);
+            a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
                 task_id: task_id.to_string(),
                 context_id: context_id.to_string(),
-                status: TaskStatus {
+                status: a2a::TaskStatus {
                     state: a2a::TaskState::Working,
-                    message: Some(Message::assistant(desc)),
-                    timestamp: chrono::Utc::now(),
+                    message: Some(schema_msg.into_a2a_message()),
+                    timestamp: now,
                 },
                 metadata: None,
             })
@@ -192,21 +197,18 @@ fn translate_agent_event_to_a2a(
 ///
 /// # Example
 ///
-/// ```rust,no_run
+/// ```rust,ignore
+/// # // Requires a concrete Agent impl; see tests for runnable examples.
 /// use synapse::a2a::server::A2AServerBuilder;
-/// use synapse::a2a::AgentCard;
-/// use std::sync::Arc;
 ///
-/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let agent = Arc::new(my_agent);
-/// let card = AgentCard::new("my-agent", "A helpful assistant");
+/// // Construct your agent and agent card.
+/// // let card = AgentCard::new("my-agent", "A helpful assistant");
+/// // let agent: Arc<dyn Agent> = ...;
 ///
-/// A2AServerBuilder::new(agent, card)
-///     .bind("0.0.0.0:8080".parse()?)
-///     .serve()
-///     .await?;
-/// # Ok(())
-/// # }
+/// // A2AServerBuilder::new(agent, card)
+/// //     .bind("0.0.0.0:8080".parse()?)
+/// //     .serve()
+/// //     .await?;
 /// ```
 pub struct A2AServerBuilder {
     agent: Arc<dyn Agent>,
@@ -238,10 +240,15 @@ impl A2AServerBuilder {
         let task_store = InMemoryTaskStore::new();
         let handler = DefaultRequestHandler::new(executor, task_store);
 
-        let router = a2a_server::router::build(handler, self.card.into_a2a_card());
+        let handler = Arc::new(handler);
+        let mut app = a2a_server::jsonrpc::jsonrpc_router(handler.clone());
+        app = app.merge(a2a_server::rest::rest_router(handler));
+        app = app.merge(a2a_server::agent_card::agent_card_router(
+            Arc::new(a2a_server::StaticAgentCard::new(self.card.into_a2a_card()))
+        ));
 
         let listener = tokio::net::TcpListener::bind(bind_addr).await?;
-        axum::serve(listener, router).await?;
+        axum::serve(listener, app).await?;
 
         Ok(())
     }
