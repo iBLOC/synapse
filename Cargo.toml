@@ -1,7 +1,8 @@
 [package]
 name = "synapse"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
+rust-version = "1.85"
 description = "Rust-based intelligent agent development framework"
 license = "Apache-2.0"
 authors = ["Synapse Contributors"]
@@ -51,6 +52,17 @@ wat = "1"
 
 # Hashing for package integrity
 sha2 = "0.10"
+
+# A2A protocol (official SDK)
+a2a-lf = "0.3"
+a2a-server-lf = "0.4"
+a2a-client-lf = "0.2"
+
+# HTTP server (for A2A server)
+axum = "0.7"
+
+# Async stream utilities
+async-stream = "0.3"
 
 [dev-dependencies]
 tokio-test = "0.4"
