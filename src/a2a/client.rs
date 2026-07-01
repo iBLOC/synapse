@@ -199,3 +199,111 @@ fn translate_a2a_response_to_agent_events(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn artifact_update_text_parts_become_token_deltas() {
+        let response = a2a::StreamResponse::ArtifactUpdate(a2a::TaskArtifactUpdateEvent {
+            task_id: "t1".to_string(),
+            context_id: "c1".to_string(),
+            artifact: a2a::Artifact {
+                artifact_id: String::new(),
+                name: Some("response".to_string()),
+                description: None,
+                parts: vec![a2a::Part::text("hello")],
+                metadata: None,
+                extensions: None,
+            },
+            append: Some(true),
+            last_chunk: Some(false),
+            metadata: None,
+        });
+
+        let events = translate_a2a_response_to_agent_events(response, "peer");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AgentStreamEvent::TokenDelta { agent, delta } => {
+                assert_eq!(agent, "peer");
+                assert_eq!(delta, "hello");
+            }
+            _ => panic!("expected TokenDelta"),
+        }
+    }
+
+    #[test]
+    fn artifact_last_chunk_emits_final_event() {
+        let response = a2a::StreamResponse::ArtifactUpdate(a2a::TaskArtifactUpdateEvent {
+            task_id: "t1".to_string(),
+            context_id: "c1".to_string(),
+            artifact: a2a::Artifact {
+                artifact_id: String::new(),
+                name: Some("response".to_string()),
+                description: None,
+                parts: vec![a2a::Part::text("done")],
+                metadata: None,
+                extensions: None,
+            },
+            append: Some(false),
+            last_chunk: Some(true),
+            metadata: None,
+        });
+
+        let events = translate_a2a_response_to_agent_events(response, "peer");
+        // Expects: one TokenDelta (from the text part) plus one Final (last_chunk).
+        assert_eq!(events.len(), 2);
+        assert!(matches!(events[0], AgentStreamEvent::TokenDelta { .. }));
+        match &events[1] {
+            AgentStreamEvent::Final { agent, .. } => assert_eq!(agent, "peer"),
+            _ => panic!("expected Final as last event"),
+        }
+    }
+
+    #[test]
+    fn failed_status_emits_error_event() {
+        let schema_msg = crate::schema::Message::assistant("oops");
+        let a2a_msg = schema_msg.into_a2a_message();
+
+        let response = a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
+            task_id: "t1".to_string(),
+            context_id: "c1".to_string(),
+            status: a2a::TaskStatus {
+                state: a2a::TaskState::Failed,
+                message: Some(a2a_msg),
+                timestamp: Some(chrono::Utc::now()),
+            },
+            metadata: None,
+        });
+
+        let events = translate_a2a_response_to_agent_events(response, "peer");
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            AgentStreamEvent::Error { agent, error } => {
+                assert_eq!(agent, "peer");
+                let s = format!("{}", error);
+                assert!(s.contains("oops"));
+            }
+            _ => panic!("expected Error"),
+        }
+    }
+
+    #[test]
+    fn task_or_message_response_yields_no_events() {
+        let task_resp = a2a::StreamResponse::Task(a2a::Task {
+            id: "t".to_string(),
+            context_id: "c".to_string(),
+            status: a2a::TaskStatus {
+                state: a2a::TaskState::Completed,
+                message: None,
+                timestamp: None,
+            },
+            history: None,
+            artifacts: None,
+            metadata: None,
+        });
+        let events = translate_a2a_response_to_agent_events(task_resp, "peer");
+        assert!(events.is_empty());
+    }
+}

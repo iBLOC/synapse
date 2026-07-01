@@ -198,3 +198,45 @@ impl From<&str> for Content {
         Content::Text(s.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_into_a2a_user_role() {
+        let m = Message::user("hi");
+        let sdk_m = m.into_a2a_message();
+        assert!(matches!(sdk_m.role, a2a::Role::User));
+        assert_eq!(sdk_m.parts.len(), 1);
+        assert!(matches!(&sdk_m.parts[0].content, a2a::PartContent::Text(t) if t == "hi"));
+    }
+
+    #[test]
+    fn message_into_a2a_assistant_role_becomes_agent() {
+        let m = Message::assistant("hello");
+        let sdk_m = m.into_a2a_message();
+        assert!(matches!(sdk_m.role, a2a::Role::Agent));
+    }
+
+    #[test]
+    fn message_from_a2a_round_trips_text() {
+        let sdk_m = a2a::Message {
+            message_id: "m1".to_string(),
+            context_id: None,
+            task_id: None,
+            role: a2a::Role::User,
+            parts: vec![a2a::Part::text("hello world")],
+            metadata: None,
+            extensions: None,
+            reference_task_ids: None,
+        };
+
+        let schema_m = Message::from_a2a_message(sdk_m);
+        assert_eq!(schema_m.role, RoleType::User);
+        match schema_m.content {
+            Content::Text(s) => assert_eq!(s, "hello world"),
+            _ => panic!("expected Text content"),
+        }
+    }
+}

@@ -151,3 +151,64 @@ impl SkillReference {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agent_card_into_a2a_preserves_required_fields() {
+        let card = AgentCard::new("greeting-bot", "Says hello.", "https://x.test", "1.0.0");
+        let sdk_card = card.into_a2a_card();
+
+        assert_eq!(sdk_card.name, "greeting-bot");
+        assert_eq!(sdk_card.description, "Says hello.");
+        assert_eq!(sdk_card.version, "1.0.0");
+        assert_eq!(sdk_card.default_input_modes, vec!["text/plain".to_string()]);
+        assert_eq!(sdk_card.default_output_modes, vec!["text/plain".to_string()]);
+        assert_eq!(
+            sdk_card.capabilities.streaming,
+            Some(false)
+        );
+    }
+
+    #[test]
+    fn agent_card_from_a2a_handles_missing_optional_fields() {
+        let sdk_card = a2a::AgentCard {
+            name: "x".to_string(),
+            description: "y".to_string(),
+            version: "0.1.0".to_string(),
+            supported_interfaces: vec![],
+            capabilities: a2a::AgentCapabilities::default(),
+            default_input_modes: vec!["text/plain".to_string()],
+            default_output_modes: vec!["text/plain".to_string()],
+            skills: vec![],
+            provider: None,
+            documentation_url: None,
+            icon_url: None,
+            security_schemes: None,
+            security_requirements: None,
+            signatures: None,
+        };
+
+        let card = AgentCard::from_a2a_card(sdk_card);
+        assert_eq!(card.name, "x");
+        assert_eq!(card.description, "y");
+        assert_eq!(card.version, "0.1.0");
+        assert_eq!(card.url, ""); // SDK has no url field
+    }
+
+    #[test]
+    fn agent_card_into_a2a_preserves_provider() {
+        let card = AgentCard::new("p", "d", "u", "1.0")
+            .provider(Provider {
+                organization: "ACME".to_string(),
+                url: Some("https://acme.test".to_string()),
+            });
+
+        let sdk_card = card.into_a2a_card();
+        let provider = sdk_card.provider.expect("provider preserved");
+        assert_eq!(provider.organization, "ACME");
+        assert_eq!(provider.url, "https://acme.test");
+    }
+}

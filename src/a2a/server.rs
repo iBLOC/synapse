@@ -253,3 +253,86 @@ impl A2AServerBuilder {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::schema::{Content, Message, RoleType};
+
+    #[test]
+    fn token_delta_becomes_append_artifact() {
+        let event = AgentStreamEvent::TokenDelta {
+            agent: "x".into(),
+            delta: "hello".into(),
+        };
+        let response = translate_agent_event_to_a2a(event, "task-1", "ctx-1");
+        match response {
+            a2a::StreamResponse::ArtifactUpdate(e) => {
+                assert_eq!(e.task_id, "task-1");
+                assert_eq!(e.context_id, "ctx-1");
+                assert_eq!(e.append, Some(true));
+                assert_eq!(e.last_chunk, Some(false));
+                assert_eq!(e.artifact.parts.len(), 1);
+            }
+            _ => panic!("expected ArtifactUpdate"),
+        }
+    }
+
+    #[test]
+    fn final_event_becomes_last_chunk_artifact() {
+        let event = AgentStreamEvent::Final {
+            agent: "x".into(),
+            message: Message {
+                role: RoleType::Assistant,
+                content: Content::Text("done".into()),
+                name: None,
+                tool_call_id: None,
+                tool_calls: None,
+            },
+        };
+        let response = translate_agent_event_to_a2a(event, "task-1", "ctx-1");
+        match response {
+            a2a::StreamResponse::ArtifactUpdate(e) => {
+                assert_eq!(e.append, Some(false));
+                assert_eq!(e.last_chunk, Some(true));
+            }
+            _ => panic!("expected ArtifactUpdate"),
+        }
+    }
+
+    #[test]
+    fn error_event_becomes_failed_status() {
+        let event = AgentStreamEvent::Error {
+            agent: "x".into(),
+            error: crate::adk::agent::AgentError::Agent("oops".into()),
+        };
+        let response = translate_agent_event_to_a2a(event, "task-1", "ctx-1");
+        match response {
+            a2a::StreamResponse::StatusUpdate(e) => {
+                assert_eq!(e.status.state, a2a::TaskState::Failed);
+                let msg = e.status.message.expect("error message present");
+                match msg.parts.first().map(|p| &p.content) {
+                    Some(a2a::PartContent::Text(t)) => assert!(t.contains("oops")),
+                    _ => panic!("expected Text part"),
+                }
+            }
+            _ => panic!("expected StatusUpdate"),
+        }
+    }
+
+    #[test]
+    fn tool_start_becomes_working_status() {
+        let event = AgentStreamEvent::ToolStart {
+            agent: "x".into(),
+            name: "search".into(),
+            args: "{}".into(),
+        };
+        let response = translate_agent_event_to_a2a(event, "task-1", "ctx-1");
+        match response {
+            a2a::StreamResponse::StatusUpdate(e) => {
+                assert_eq!(e.status.state, a2a::TaskState::Working);
+            }
+            _ => panic!("expected StatusUpdate"),
+        }
+    }
+}
