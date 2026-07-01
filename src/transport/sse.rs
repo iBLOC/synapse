@@ -205,6 +205,157 @@ pub trait HttpClientSse: HttpClient {
 
 
 
+#[cfg(target_arch = "wasm32")]
+#[async_trait]
+impl HttpClientSse for super::wasi::WasiHttpClient {
+    async fn sse_post(
+        &self,
+        url: &str,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+    ) -> Result<SseStream, SseError> {
+        use wasi::http::types::{
+            Fields, Method, OutgoingBody, OutgoingRequest, RequestOptions, Scheme,
+        };
+
+        let (scheme_str, authority, path_with_query) = parse_wasi_url(url)
+            .map_err(|e| SseError::Http(super::HttpError::Request(e.to_string())))?;
+
+        let method = Method::Post;
+        let mut all_headers = headers;
+        all_headers.push((
+            "Accept".to_string(),
+            "text/event-stream".to_string(),
+        ));
+
+        let header_entries: Vec<(String, Vec<u8>)> = all_headers
+            .iter()
+            .map(|(k, v)| (k.clone(), v.as_bytes().to_vec()))
+            .collect();
+        let fields = Fields::from_list(&header_entries)
+            .map_err(|e| SseError::Http(super::HttpError::Request(format!("fields: {:?}", e))))?;
+
+        let wasi_req = OutgoingRequest::new(fields);
+        let scheme = if scheme_str == "https" { Scheme::Https } else { Scheme::Http };
+        wasi_req
+            .set_scheme(Some(&scheme))
+            .map_err(|e| SseError::Http(super::HttpError::Request(format!("set_scheme: {:?}", e))))?;
+        wasi_req
+            .set_authority(Some(&authority))
+            .map_err(|e| SseError::Http(super::HttpError::Request(format!("set_authority: {:?}", e))))?;
+        wasi_req
+            .set_path_with_query(Some(&path_with_query))
+            .map_err(|e| SseError::Http(super::HttpError::Request(format!("set_path_with_query: {:?}", e))))?;
+        wasi_req
+            .set_method(&method)
+            .map_err(|e| SseError::Http(super::HttpError::Request(format!("set_method: {:?}", e))))?;
+
+        // Write the request body (LLM prompt JSON) into the wasi body stream.
+        if !body.is_empty() {
+            let body_res = wasi_req
+                .body()
+                .map_err(|e| SseError::Http(super::HttpError::Request(format!("body(): {:?}", e))))?;
+            write_wasi_body(&body_res, &body)
+                .map_err(SseError::Http)?;
+        }
+
+        let options = RequestOptions::new();
+        let future = wasi::http::outgoing_handler::handle(wasi_req, Some(options))
+            .map_err(|e| SseError::Http(super::HttpError::Request(format!("handle: {:?}", e))))?;
+
+        let response = poll_wasi_response(&future)
+            .map_err(|e| SseError::Http(e))?;
+        let status = response.status();
+        if !(200..300).contains(&status) {
+            return Err(SseError::Http(super::HttpError::Status(status, "".into())));
+        }
+
+        let incoming = response
+            .consume()
+            .map_err(|e| SseError::Http(super::HttpError::Request(format!("consume: {:?}", e))))?;
+        let stream = incoming
+            .stream()
+            .map_err(|e| SseError::Http(super::HttpError::Request(format!("body.stream: {:?}", e))))?;
+
+        let (tx, rx) = mpsc::channel::<Result<SseEvent, SseError>>(32);
+
+        // Spawn a blocking-style task to drain the wasi-http stream into the channel.
+        // We use tokio::task::spawn_blocking because the wasi::io::poll::poll
+        // call below blocks the current thread on the WASM runtime's reactor.
+        tokio::task::spawn_blocking(move || {
+            let mut state = SseParseState::new();
+            loop {
+                match stream.read(64 * 1024) {
+                    Ok(chunk) => {
+                        if chunk.is_empty() {
+                            break;
+                        }
+                        let evs = parse_chunk(&chunk, &mut state);
+                        for ev in evs {
+                            if tx.blocking_send(Ok(ev)).is_err() {
+                                return;
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.blocking_send(Err(SseError::ConnectionLost(format!("{:?}", e))));
+                        return;
+                    }
+                }
+            }
+        });
+
+        Ok(SseStream { rx })
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn parse_wasi_url(url: &str) -> Result<(String, String, String), String> {
+    let (scheme, rest) = if let Some(idx) = url.find("://") {
+        (&url[..idx], &url[idx + 3..])
+    } else {
+        return Err(format!("invalid URL (no scheme): {}", url));
+    };
+    let (authority, path) = match rest.find('/') {
+        Some(idx) => (&rest[..idx], &rest[idx..]),
+        None => (rest, "/"),
+    };
+    if authority.is_empty() {
+        return Err(format!("URL has empty authority: {}", url));
+    }
+    Ok((scheme.to_string(), authority.to_string(), path.to_string()))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn write_wasi_body(body: &OutgoingBody, bytes: &[u8]) -> Result<(), super::HttpError> {
+    use std::io::Write;
+    let mut stream = body
+        .write()
+        .map_err(|_| super::HttpError::Request("body.write failed".into()))?;
+    stream
+        .write_all(bytes)
+        .map_err(|e| super::HttpError::Request(format!("write_all: {}", e)))?;
+    drop(stream);
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn poll_wasi_response(
+    future: &wasi::http::types::FutureIncomingResponse,
+) -> Result<wasi::http::types::IncomingResponse, super::HttpError> {
+    let pollable = future.subscribe();
+    loop {
+        match future.get() {
+            Some(Ok(Ok(response))) => return Ok(response),
+            Some(Ok(Err(e))) => return Err(super::HttpError::Request(format!("response error: {:?}", e))),
+            Some(Err(())) => return Err(super::HttpError::Request("future error".into())),
+            None => {
+                let _ready = wasi::io::poll::poll(&[&pollable]);
+            }
+        }
+    }
+}
+
 #[async_trait]
 impl HttpClientSse for super::native::ReqwestHttpClient {
     async fn sse_post(
