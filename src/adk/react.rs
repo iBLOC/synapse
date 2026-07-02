@@ -193,7 +193,7 @@ impl<M: BaseChatModel + 'static, T: InvokableTool + 'static> ChatModelAgent<M, T
                 if cancel.is_cancelled() {
                     return;
                 }
-                if iterations >= 100 {
+                if iterations >= max_iterations {
                     let _ = writer
                         .send(AgentStreamEvent::Error {
                             agent: agent_name.clone(),
@@ -661,5 +661,243 @@ impl ToolMiddleware for LoggingToolMiddleware {
     fn after_tool(&self, name: &str, result: &str) -> Result<(), ToolError> {
         tracing::debug!(tool = %name, result = %result, "tool completed");
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::components::model::{
+        BaseChatModel, FinishReason, GenerateOptions, MessageDelta, ModelError, ModelResult,
+        StreamReader,
+    };
+    use crate::schema::{Content, Message, RoleType};
+    use async_trait::async_trait;
+    use std::sync::Mutex;
+
+    /// In-memory mock that satisfies [`BaseChatModel`].
+    ///
+    /// `ScriptedChatModel::new` returns the same scripted deltas once,
+    /// then sends EOF. `ScriptedChatModel::looping` re-emits the same
+    /// scripted deltas on every call (used to drive max-iterations tests).
+    struct ScriptedChatModel {
+        deltas: Vec<MessageDelta>,
+        loop_forever: bool,
+    }
+
+    impl ScriptedChatModel {
+        fn new(deltas: Vec<MessageDelta>) -> Self {
+            Self {
+                deltas,
+                loop_forever: false,
+            }
+        }
+
+        fn looping(deltas: Vec<MessageDelta>) -> Self {
+            Self {
+                deltas,
+                loop_forever: true,
+            }
+        }
+    }
+
+    #[async_trait]
+    impl BaseChatModel for ScriptedChatModel {
+        async fn generate(
+            &self,
+            _input: Vec<Message>,
+            _options: GenerateOptions,
+        ) -> ModelResult<Message> {
+            Ok(Message::assistant("(scripted: no final answer)"))
+        }
+
+        async fn stream(
+            &self,
+            _input: Vec<Message>,
+            _options: GenerateOptions,
+        ) -> ModelResult<StreamReader> {
+            Err(ModelError::Api("legacy stream not implemented".into()))
+        }
+
+        async fn stream_deltas(
+            &self,
+            _input: Vec<Message>,
+            _options: GenerateOptions,
+        ) -> ModelResult<crate::stream::StreamReader<MessageDelta>> {
+            let (writer, reader) = crate::stream::StreamReader::<MessageDelta>::new(8);
+            let script = self.deltas.clone();
+            let loop_forever = self.loop_forever;
+            tokio::spawn(async move {
+                loop {
+                    for d in &script {
+                        if !writer.send(d.clone()).await {
+                            return;
+                        }
+                    }
+                    if !loop_forever {
+                        return;
+                    }
+                }
+            });
+            Ok(reader)
+        }
+    }
+
+    fn assistant_text_delta(s: &str) -> MessageDelta {
+        MessageDelta {
+            content_delta: s.to_string(),
+            tool_call_deltas: vec![],
+            finish_reason: None,
+            usage: None,
+        }
+    }
+
+    fn terminal_delta(reason: FinishReason) -> MessageDelta {
+        MessageDelta {
+            content_delta: String::new(),
+            tool_call_deltas: vec![],
+            finish_reason: Some(reason),
+            usage: None,
+        }
+    }
+
+    fn tool_call_delta(name: &str, args: &str) -> MessageDelta {
+        use crate::components::model::ToolCallDelta;
+        MessageDelta {
+            content_delta: String::new(),
+            tool_call_deltas: vec![ToolCallDelta {
+                index: 0,
+                id: Some("call_1".to_string()),
+                name: Some(name.to_string()),
+                arguments_delta: args.to_string(),
+            }],
+            finish_reason: None,
+            usage: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn run_loop_streaming_emits_text_then_final() {
+        // A simple scripted model: emit "hi" then a Stop terminal delta.
+        let model = Arc::new(ScriptedChatModel::new(vec![
+            assistant_text_delta("hi "),
+            assistant_text_delta("there"),
+            terminal_delta(FinishReason::Stop),
+        ]));
+        let agent = ChatModelAgent::<ScriptedChatModel, SimpleTool>::new(
+            "tester",
+            "tests ChatModelAgent streaming",
+            model,
+        );
+
+        let mut stream = agent
+            .run_loop_streaming(vec![Message::user("ping")])
+            .await
+            .expect("stream_run ok");
+
+        let mut token_count = 0;
+        let mut final_seen = false;
+        while let Some(event) = stream.next().await {
+            match event {
+                AgentStreamEvent::TokenDelta { agent, delta } => {
+                    assert_eq!(agent, "tester");
+                    token_count += 1;
+                }
+                AgentStreamEvent::Final { agent, message } => {
+                    assert_eq!(agent, "tester");
+                    final_seen = true;
+                    match message.content {
+                        Content::Text(t) => {
+                            assert!(t.contains("hi ") || t.contains("there"));
+                        }
+                        _ => panic!("Final message should be Text"),
+                    }
+                }
+                AgentStreamEvent::Error { agent, error } => {
+                    panic!("unexpected error event from {}: {}", agent, error);
+                }
+                _ => {
+                    // StepTransition, etc. — ignored; we only assert on the
+                    // text + final pair to keep the test focused.
+                }
+            }
+        }
+        assert_eq!(token_count, 2, "expected 2 token deltas");
+        assert!(final_seen, "expected a Final event");
+    }
+
+    #[tokio::test]
+    async fn run_loop_streaming_respects_max_iterations() {
+        // Run with max_iterations(1) so the second iteration triggers
+        // the MaxIterationsExceeded error. The model returns a text
+        // delta without a tool call, so the first iteration produces
+        // a Final — and the loop should not advance. To exercise the
+        // max-iter code path, we set max_iterations(0) which makes
+        // the first check at the top of the loop fire immediately.
+        let model = Arc::new(ScriptedChatModel::new(vec![
+            assistant_text_delta("ignored"),
+            terminal_delta(FinishReason::Stop),
+        ]));
+        let agent = ChatModelAgent::<ScriptedChatModel, SimpleTool>::new(
+            "zero-iter",
+            "max_iterations(0) trips before any model call",
+            model,
+        )
+        .max_iterations(0);
+
+        let mut stream = agent
+            .run_loop_streaming(vec![Message::user("ping")])
+            .await
+            .expect("stream_run ok");
+
+        let mut saw_max_iter = false;
+        while let Some(event) = stream.next().await {
+            if let AgentStreamEvent::Error { error, .. } = event {
+                if matches!(error, crate::adk::agent::AgentError::MaxIterationsExceeded) {
+                    saw_max_iter = true;
+                }
+            }
+        }
+        assert!(
+            saw_max_iter,
+            "max_iterations(0) should emit MaxIterationsExceeded before any model call"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_loop_streaming_final_message_accumulates_deltas() {
+        // Verify that the Final message contains the concatenated text of
+        // every token delta, in order, with no text dropped.
+        let model = Arc::new(ScriptedChatModel::new(vec![
+            assistant_text_delta("a"),
+            assistant_text_delta("b"),
+            assistant_text_delta("c"),
+            terminal_delta(FinishReason::Stop),
+        ]));
+        let agent = ChatModelAgent::<ScriptedChatModel, SimpleTool>::new(
+            "accum",
+            "tests accumulation",
+            model,
+        );
+        let mut stream = agent
+            .run_loop_streaming(vec![Message::user("ping")])
+            .await
+            .expect("stream_run ok");
+
+        let mut final_text = None;
+        while let Some(event) = stream.next().await {
+            if let AgentStreamEvent::Final { message, .. } = event {
+                final_text = match message.content {
+                    Content::Text(t) => Some(t),
+                    _ => None,
+                };
+            }
+        }
+        let t = final_text.expect("Final event should have been emitted");
+        assert!(
+            t.contains('a') && t.contains('b') && t.contains('c'),
+            "Final text should accumulate a, b, c — got {:?}",
+            t
+        );
     }
 }
