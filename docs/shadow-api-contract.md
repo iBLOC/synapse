@@ -249,6 +249,18 @@ the lobe is still added to the in-memory cache (and reachable
 through shadow + A2A) but will not survive a cortex restart.
 Re-register after the DB is back.
 
+### Per-lobe URL conventions
+
+The `url` field should point at the A2A endpoint the lobe
+exposes. The a2a-rs JSON-RPC transport posts to whatever URL
+is registered; the lobe is responsible for mounting its
+A2A handler at that path:
+
+| Lobe | URL suffix | Notes |
+|---|---|---|
+| `temporal`, `parietal`, `occipital`, `memory` | (root) | These use `synapse::a2a::server::A2AServerBuilder` which mounts at `/`. |
+| `prefrontal` | `/api/a2a` | prefrontal has its own A2A route at `/api/a2a` (see `prefrontal/src/server/routes.rs`). |
+
 ## Conventions
 
 - **All timestamps** are ISO-8601 UTC strings in responses, except
