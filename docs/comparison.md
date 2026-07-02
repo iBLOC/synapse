@@ -1,35 +1,42 @@
 ---
-title: Comparison with LangChain / Eino
+title: Comparison with LangChain / Eino / BeeAI
 ---
 
-# Comparison with LangChain / Eino
+# Comparison with LangChain / Eino / BeeAI
 
-Synapse is positioned as a Rust-native alternative to LangChain and
-Eino, with unique strengths in cross-platform deployment and A2A
-protocols.
+Synapse is positioned as a Rust-native alternative to LangChain, Eino,
+and BeeAI, with unique strengths in cross-platform deployment, A2A
+protocols, and WASM sandboxing.
 
 ## Feature Matrix
 
-| Feature | Synapse | LangChain | Eino |
-|---------|---------|-----------|------|
-| Language | Rust | Python/JS | Go |
-| Runnable composition | ✅ | ✅ | ✅ |
-| Graph workflows | ✅ | ✅ (LangGraph) | ✅ |
-| ReAct agent (multi-turn) | ✅ | ✅ | ✅ |
-| Streaming | ⚠️ Partial | ✅ Full | ✅ |
-| Tool middleware | ✅ | ✅ | ✅ |
-| Async native | ✅ | ⚠️ Partial | ✅ |
-| Type safety | ✅ | ❌ (Python) | ✅ |
-| Performance | ✅ | ⚠️ | ✅ |
-| RAG (chunking) | ✅ 4 splitters | ✅ Many | ✅ |
-| RAG vector stores | ⚠️ InMemory only | ✅ 100+ | ⚠️ Few |
-| Embedding providers | ⚠️ OpenAI only | ✅ Many | ✅ Many |
-| Multi-agent | ✅ 4 patterns | ✅ | ✅ |
-| MCP | ✅ stdio + HTTP | ✅ | ❌ |
-| A2A protocol | ✅ | ❌ | ❌ |
-| WASM deployment | ✅ Native | ❌ | ❌ |
-| Cross-platform (native + WASM) | ✅ | ❌ | ❌ |
-| Tests | 205 | N/A | N/A |
+| Feature | Synapse | LangChain | Eino | BeeAI |
+|---------|---------|-----------|------|-------|
+| Language | Rust | Python/JS | Go | Python/TypeScript |
+| Governance | Apache 2.0 | MIT | Apache 2.0 | Linux Foundation |
+| Runnable composition | ✅ | ✅ | ✅ | ✅ |
+| Graph workflows | ✅ | ✅ (LangGraph) | ✅ | ✅ |
+| ReAct agent (multi-turn) | ✅ | ✅ | ✅ | ✅ |
+| Streaming | ⚠️ Partial | ✅ Full | ✅ | ✅ |
+| Tool middleware | ✅ | ✅ | ✅ | ✅ Event-driven |
+| Async native | ✅ | ⚠️ Partial | ✅ | ✅ |
+| Type safety | ✅ | ❌ (Python) | ✅ | ⚠️ (TS partial) |
+| Performance | ✅ | ⚠️ | ✅ | ⚠️ |
+| RAG (chunking) | ✅ 4 splitters | ✅ Many | ✅ | ⚠️ External |
+| RAG vector stores | ⚠️ InMemory only | ✅ 100+ | ⚠️ Few | ⚠️ External |
+| Embedding providers | ⚠️ 3 (OpenAI/Anthropic/Azure) | ✅ Many | ✅ Many | ✅ 10+ |
+| LLM providers | ⚠️ 3 | ✅ Many | ✅ Many | ✅ 10+ |
+| Multi-agent | ✅ 4 patterns | ✅ | ✅ | ✅ |
+| MCP | ✅ stdio + HTTP | ✅ | ❌ | ✅ Native |
+| A2A protocol | ✅ | ❌ | ❌ | ✅ Native |
+| WASM deployment | ✅ Native | ❌ | ❌ | ❌ |
+| Cross-platform (native + WASM) | ✅ | ❌ | ❌ | ❌ |
+| Memory management | ❌ (0.3.x) | ✅ | ⚠️ | ✅ Built-in |
+| OpenTelemetry observability | ❌ (0.3.x) | ✅ | ⚠️ | ✅ Native |
+| Declarative YAML orchestration | ❌ | ⚠️ Partial | ⚠️ | ✅ |
+| Built-in caching | ❌ | ✅ | ⚠️ | ✅ |
+| Constraint enforcement | ❌ | ❌ | ❌ | ✅ |
+| Tests | ~182 | N/A | N/A | N/A |
 
 ## Synapse's Unique Strengths
 
@@ -45,7 +52,9 @@ protocols.
 1. **Ecosystem** — LangChain has 100+ integrations; Synapse has core components only.
 2. **Vector stores** — Currently in-memory only.
 3. **Streaming** — Partial support.
-4. **Community** — New project, smaller community.
+4. **Memory management** — Not yet built-in (planned 0.3.x).
+5. **Observability** — OpenTelemetry integration not yet (planned 0.3.x).
+6. **Community** — New project, smaller community.
 
 ## When to Choose Synapse
 
@@ -65,3 +74,13 @@ protocols.
 
 ✅ Prefer Go (Cloud Native ecosystem)
 ✅ Need deep ByteDance integration
+
+## When to Choose BeeAI
+
+✅ Linux Foundation governance with vendor-neutral open source
+✅ Python or TypeScript with full feature parity
+✅ Built-in memory management (unbounded / summarized / token-windowed)
+✅ Declarative YAML-based agent orchestration
+✅ Production-grade constraint enforcement + caching
+✅ Native OpenTelemetry observability out of the box
+✅ MCP and A2A interop as first-class citizens

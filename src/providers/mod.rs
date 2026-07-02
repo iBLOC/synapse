@@ -100,6 +100,7 @@ pub enum ContentPart {
     },
     ToolUse {
         id: String,
+        name: String,
         input: serde_json::Value,
     },
     ToolResult {

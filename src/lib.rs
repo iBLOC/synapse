@@ -15,6 +15,7 @@ pub mod session;
 pub mod skills;
 pub mod stream;
 pub mod task;
+pub mod thought;
 pub mod transport;
 pub mod utils;
 pub mod wasm;

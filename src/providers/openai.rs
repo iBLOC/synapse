@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use super::{ChatOptions, Content, LLMError, LLMProvider, LLMResult, Message, Stream};
+use super::{ChatOptions, Content, ContentPart, LLMError, LLMProvider, LLMResult, Message, Stream};
 
 pub struct OpenAIProvider {
     client: reqwest::Client,
@@ -115,17 +115,41 @@ impl LLMProvider for OpenAIProvider {
             .await
             .map_err(|e| LLMError::Api(e.to_string()))?;
 
-        let content = response
+        let choice = response
             .choices
             .first()
-            .ok_or_else(|| LLMError::Api("No choices in response".to_string()))?
-            .message
-            .content
-            .clone();
+            .ok_or_else(|| LLMError::Api("No choices in response".to_string()))?;
+
+        let text = choice.message.content.clone().unwrap_or_default();
+        let mut parts: Vec<ContentPart> = Vec::new();
+
+        if !text.is_empty() {
+            parts.push(ContentPart::Text { text });
+        }
+
+        if let Some(ref tool_calls) = choice.message.tool_calls {
+            for tc in tool_calls {
+                let input: serde_json::Value = tc
+                    .function
+                    .arguments
+                    .as_deref()
+                    .and_then(|args| serde_json::from_str(args).ok())
+                    .unwrap_or(serde_json::json!({}));
+                parts.push(ContentPart::ToolUse {
+                    id: tc.id.clone(),
+                    name: tc.function.name.clone(),
+                    input,
+                });
+            }
+        }
 
         Ok(Message {
             role: super::Role::Assistant,
-            content: Content::text(content),
+            content: if parts.is_empty() {
+                Content::text(String::new())
+            } else {
+                Content::from_parts(parts)
+            },
         })
     }
 
@@ -200,7 +224,23 @@ struct OpenAIChoice {
 
 #[derive(Deserialize)]
 struct OpenAIMessageResponse {
-    content: String,
+    content: Option<String>,
+    #[serde(default)]
+    tool_calls: Option<Vec<OpenAIToolCall>>,
+}
+
+#[derive(Deserialize)]
+struct OpenAIToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    _type: Option<String>,
+    function: OpenAIToolCallFunction,
+}
+
+#[derive(Deserialize)]
+struct OpenAIToolCallFunction {
+    name: String,
+    arguments: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -211,4 +251,121 @@ struct OpenAIEmbeddingResponse {
 #[derive(Deserialize)]
 struct OpenAIEmbedding {
     embedding: Vec<f32>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::ContentPart;
+
+    #[test]
+    fn deserialize_tool_call_response() {
+        let json = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "content": null,
+                    "tool_calls": [{
+                        "id": "call_abc",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": "{\"city\":\"Paris\"}"
+                        }
+                    }]
+                }
+            }]
+        });
+        let response: OpenAIChatResponse =
+            serde_json::from_value(json).expect("must deserialize");
+        let msg = &response.choices[0].message;
+
+        assert_eq!(msg.content.as_deref(), None);
+        let tc = msg.tool_calls.as_ref().unwrap();
+        assert_eq!(tc.len(), 1);
+        assert_eq!(tc[0].id, "call_abc");
+        assert_eq!(tc[0].function.name, "get_weather");
+        assert_eq!(
+            tc[0].function.arguments.as_deref(),
+            Some("{\"city\":\"Paris\"}")
+        );
+    }
+
+    #[test]
+    fn deserialize_text_only_response() {
+        let json = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "content": "Hello!",
+                    "tool_calls": null
+                }
+            }]
+        });
+        let response: OpenAIChatResponse =
+            serde_json::from_value(json).expect("must deserialize");
+        let msg = &response.choices[0].message;
+
+        assert_eq!(msg.content.as_deref(), Some("Hello!"));
+        assert!(msg.tool_calls.is_none());
+    }
+
+    #[test]
+    fn deserialize_multiple_tool_calls() {
+        let json = serde_json::json!({
+            "choices": [{
+                "message": {
+                    "content": null,
+                    "tool_calls": [
+                        {"id": "c1", "type": "function", "function": {"name": "f1", "arguments": "{}"}},
+                        {"id": "c2", "type": "function", "function": {"name": "f2", "arguments": "{\"k\":\"v\"}"}}
+                    ]
+                }
+            }]
+        });
+        let response: OpenAIChatResponse =
+            serde_json::from_value(json).expect("must deserialize");
+        let tc = response.choices[0].message.tool_calls.as_ref().unwrap();
+        assert_eq!(tc.len(), 2);
+        assert_eq!(tc[0].id, "c1");
+        assert_eq!(tc[1].id, "c2");
+    }
+
+    #[test]
+    fn tool_use_builds_content_parts_from_tool_call() {
+        use super::ContentPart;
+        let tc = OpenAIToolCall {
+            id: "call_1".into(),
+            _type: Some("function".into()),
+            function: OpenAIToolCallFunction {
+                name: "search".into(),
+                arguments: Some("{\"term\":\"rust\"}".into()),
+            },
+        };
+        let input: serde_json::Value = tc
+            .function
+            .arguments
+            .as_deref()
+            .and_then(|args| serde_json::from_str(args).ok())
+            .unwrap_or(serde_json::json!({}));
+        let part = ContentPart::ToolUse {
+            id: tc.id.clone(),
+            name: tc.function.name.clone(),
+            input,
+        };
+
+        assert!(matches!(part, ContentPart::ToolUse { .. }));
+        if let ContentPart::ToolUse { id, name, ref input } = part {
+            assert_eq!(id, "call_1");
+            assert_eq!(name, "search");
+            assert_eq!(input["term"], "rust");
+        } else {
+            unreachable!();
+        }
+    }
+
+    #[test]
+    fn tool_use_parses_empty_arguments_as_empty_object() {
+        let input: serde_json::Value =
+            serde_json::from_str("").unwrap_or(serde_json::json!({}));
+        assert_eq!(input, serde_json::json!({}));
+    }
 }
