@@ -1,5 +1,56 @@
 use serde::{Deserialize, Serialize};
 
+/// What modalities (input/output formats) this agent accepts and
+/// produces. Modality strings follow the A2A v1.0 / W3C-style
+/// MIME-like labels: "text", "voice" (audio), "image", "video".
+pub type Modality = String;
+
+/// Capability strings describe what the agent can DO. They are
+/// free-form, lowercase, hyphen-separated. Examples:
+/// - "mcp:github"        — uses github MCP
+/// - "memory:recall"     — can recall from hippocampus
+/// - "memory:store"      — can store to hippocampus
+/// - "face-recognition"  — supports face detection/match
+/// - "object-detection"  — supports object detection
+/// - "sensor-ingest"     — accepts sensor stream input
+/// - "voice-emotion"     — recognizes emotion in voice
+/// - "image-generation"  — produces image output
+pub type Capability = String;
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct AgentMetadata {
+    /// Input modalities accepted (e.g. ["text", "voice"]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub input_modalities: Vec<Modality>,
+    /// Output modalities produced (e.g. ["text", "voice"]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub output_modalities: Vec<Modality>,
+    /// Free-form capability tags (e.g. ["mcp:github", "memory:recall"]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<Capability>,
+}
+
+impl AgentMetadata {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_inputs(mut self, mods: Vec<Modality>) -> Self {
+        self.input_modalities = mods;
+        self
+    }
+
+    pub fn with_outputs(mut self, mods: Vec<Modality>) -> Self {
+        self.output_modalities = mods;
+        self
+    }
+
+    pub fn with_capabilities(mut self, caps: Vec<Capability>) -> Self {
+        self.capabilities = caps;
+        self
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentCard {
     pub name: String,
@@ -9,6 +60,12 @@ pub struct AgentCard {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<Provider>,
     pub capabilities: Capabilities,
+    /// What this agent accepts, produces, and can do. Synapse
+    /// extension to the a2a-rs AgentCard; shadow apps read this
+    /// to know which modalities to use and which capabilities to
+    /// expose to the user.
+    #[serde(default)]
+    pub metadata: AgentMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub authentication: Option<Authentication>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -29,6 +86,7 @@ impl AgentCard {
             version: version.into(),
             provider: None,
             capabilities: Capabilities::default(),
+            metadata: AgentMetadata::default(),
             authentication: None,
             skills: None,
         }
@@ -44,6 +102,11 @@ impl AgentCard {
         self
     }
 
+    pub fn metadata(mut self, metadata: AgentMetadata) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
     pub fn authentication(mut self, auth: Authentication) -> Self {
         self.authentication = Some(auth);
         self
@@ -54,7 +117,10 @@ impl AgentCard {
         self
     }
 
-    /// Convert to the a2a-rs SDK's AgentCard type.
+    /// Convert to the a2a-rs SDK's AgentCard type. Modalities are
+    /// mapped to the SDK's `default_input_modes` / `default_output_modes`
+    /// (synthesizing `text/plain`, `audio/wav`, etc. labels); capabilities
+    /// are dropped (the SDK doesn't have a generic capabilities field).
     pub fn into_a2a_card(self) -> a2a::AgentCard {
         a2a::AgentCard {
             name: self.name,
@@ -67,8 +133,8 @@ impl AgentCard {
                 extensions: None,
                 extended_agent_card: None,
             },
-            default_input_modes: vec!["text/plain".to_string()],
-            default_output_modes: vec!["text/plain".to_string()],
+            default_input_modes: modality_to_modes(&self.metadata.input_modalities),
+            default_output_modes: modality_to_modes(&self.metadata.output_modalities),
             skills: vec![], // TODO: map skills
             provider: self.provider.map(|p| a2a::AgentProvider {
                 organization: p.organization,
@@ -98,10 +164,43 @@ impl AgentCard {
                 push_notifications: card.capabilities.push_notifications.unwrap_or(false),
                 state_transition_history: false, // SDK doesn't have this field
             },
+            metadata: AgentMetadata {
+                input_modalities: modes_to_modality(&card.default_input_modes),
+                output_modalities: modes_to_modality(&card.default_output_modes),
+                capabilities: Vec::new(),
+            },
             authentication: None, // TODO: map authentication
             skills: None,
         }
     }
+}
+
+fn modality_to_modes(mods: &[Modality]) -> Vec<String> {
+    if mods.is_empty() {
+        return vec!["text/plain".to_string()];
+    }
+    mods.iter()
+        .map(|m| match m.as_str() {
+            "text" => "text/plain".to_string(),
+            "voice" | "audio" => "audio/wav".to_string(),
+            "image" => "image/png".to_string(),
+            "video" => "video/mp4".to_string(),
+            other => other.to_string(),
+        })
+        .collect()
+}
+
+fn modes_to_modality(modes: &[String]) -> Vec<Modality> {
+    modes
+        .iter()
+        .map(|m| match m.as_str() {
+            "text/plain" | "text" => "text".to_string(),
+            s if s.starts_with("audio") => "voice".to_string(),
+            s if s.starts_with("image") => "image".to_string(),
+            s if s.starts_with("video") => "video".to_string(),
+            other => other.to_string(),
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,5 +309,51 @@ mod tests {
         let provider = sdk_card.provider.expect("provider preserved");
         assert_eq!(provider.organization, "ACME");
         assert_eq!(provider.url, "https://acme.test");
+    }
+
+    #[test]
+    fn metadata_round_trips_through_serde() {
+        let meta = AgentMetadata::new()
+            .with_inputs(vec!["text".into(), "voice".into()])
+            .with_outputs(vec!["text".into()])
+            .with_capabilities(vec!["mcp:github".into(), "memory:recall".into()]);
+        let json = serde_json::to_string(&meta).unwrap();
+        let back: AgentMetadata = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.input_modalities, vec!["text", "voice"]);
+        assert_eq!(back.output_modalities, vec!["text"]);
+        assert_eq!(back.capabilities, vec!["mcp:github", "memory:recall"]);
+    }
+
+    #[test]
+    fn modality_to_modes_handles_known_modalities() {
+        let modes = modality_to_modes(&[
+            "text".into(),
+            "voice".into(),
+            "image".into(),
+            "video".into(),
+        ]);
+        assert_eq!(
+            modes,
+            vec!["text/plain", "audio/wav", "image/png", "video/mp4"]
+        );
+    }
+
+    #[test]
+    fn modality_to_modes_defaults_to_text_plain() {
+        let modes = modality_to_modes(&[]);
+        assert_eq!(modes, vec!["text/plain"]);
+    }
+
+    #[test]
+    fn metadata_maps_to_a2a_input_modes() {
+        let card = AgentCard::new("x", "d", "u", "1.0")
+            .metadata(
+                AgentMetadata::new()
+                    .with_inputs(vec!["text".into(), "voice".into()])
+                    .with_outputs(vec!["text".into()]),
+            );
+        let sdk = card.into_a2a_card();
+        assert_eq!(sdk.default_input_modes, vec!["text/plain", "audio/wav"]);
+        assert_eq!(sdk.default_output_modes, vec!["text/plain"]);
     }
 }
