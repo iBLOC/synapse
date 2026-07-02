@@ -222,6 +222,33 @@ Cortex-side env vars (set when starting cortex):
 | `CORTEX_SKIP_NEURE` | unset | Set to `1` to disable cortex's in-process neure (test/dev). |
 | `NEURE_PORT` | (random) | Where cortex's neure listens. Lobe projects call cortex at `/neure/v1/chat/completions`. |
 
+## Lobe registration (for lobe projects, not shadow clients)
+
+Native lobes (temporal, parietal, occipital, memory, prefrontal)
+register themselves on startup with cortex at:
+
+```
+POST /cortex/lobes/{name}
+Content-Type: application/json
+
+{
+  "name": "temporal",            // optional; must match path
+  "kind": "native",
+  "url": "http://temporal.local:8443",
+  "agent_card": { ... }
+}
+```
+
+The path identifies the agent (lobe name = URL segment). When the
+body has `name`, it must equal the path segment — this protects
+against typos. On 200 OK, the lobe is now discoverable via
+`GET /shadow/v1/agents` and routable through the A2A gateway.
+
+Persistence is best-effort: if cortex's database is unreachable
+the lobe is still added to the in-memory cache (and reachable
+through shadow + A2A) but will not survive a cortex restart.
+Re-register after the DB is back.
+
 ## Conventions
 
 - **All timestamps** are ISO-8601 UTC strings in responses, except
