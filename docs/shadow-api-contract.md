@@ -161,11 +161,18 @@ event: done
 data: {"conversation_id": "...", "agent": "temporal", "state": "COMPLETED", "timestamp": 1720000000000}
 ```
 
-**Current limitation**: cortex's underlying A2A client is non-streaming
-(`send_task` only), so each `:stream` call currently emits exactly one
-`delta` event containing the full reply, followed by `done`. The SSE
-contract is stable so clients can rely on it; the upgrade to real
-token-by-token streaming is tracked as Phase 4.1.
+**Current behavior**: cortex's streaming path is wired to a2a-rs's
+`send_streaming_message` RPC, so the SSE contract above is observed
+end-to-end. Each `delta` event carries one token-chunk; the `done`
+event fires when the agent's artifact is complete. Empty `delta`
+events (from non-text events the SDK ignores) are dropped before
+they reach the wire.
+
+A2A note: the a2a-rs SDK translator emits a `Final` event with only
+the last chunk's text (it does not accumulate `append=true` chunks).
+The shadow handler tracks the accumulated deltas itself and uses
+that for the conversation history so the agent turn reflects the
+full user-visible reply.
 
 ## Modalities & Capabilities
 
@@ -234,7 +241,6 @@ curl -N -X POST http://localhost:8443/shadow/v1/conversations/$CONV/messages:str
 - **v0.4 — Auth**: API key on every shadow request
 - **v0.4 — Persistent history**: conversations survive cortex restart
   (backed by hippocampus lobe)
-- **v0.5 — Real streaming**: `:stream` forwards true token deltas
 - **v0.5 — Media**: `/shadow/v1/media/{lobe}` for WebRTC voice/video
 - **v0.6 — Multi-modal input**: POST images/audio as base64 in
   `SendMessageRequest` (forwarded via A2A FilePart)
