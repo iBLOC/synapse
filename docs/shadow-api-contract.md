@@ -3,13 +3,35 @@
 > **Audience**: anyone building a client that talks to cortex.
 > **Base URL**: `http://<cortex-host>:<port>` (default `http://localhost:8443`).
 > **Versioning**: prefix `/shadow/v1/`. New versions will use `/shadow/v2/`.
-> **Auth**: TBD. Currently the shadow API is unauthenticated. v0.4 will
-> add an API-key middleware matching `/api/cortex/admin`.
+> **Auth (v0.3)**: optional API key. When `cortex.shadow.api_key` is set
+> in cortex's config, every shadow request must carry a matching
+> `X-Shadow-Key` header. When empty, the shadow API is open (dev mode).
 
 The shadow API is the only cortex surface external clients should use.
 It is REST + SSE. Behind it, cortex translates to A2A and forwards to
 the appropriate lobe (temporal / parietal / occipital / memory / future
 prefrontal registration).
+
+## Authentication
+
+When cortex's config has `cortex.shadow.api_key = "<some-key>"`, every
+request to `/shadow/v1/*` must include:
+
+```
+X-Shadow-Key: <some-key>
+```
+
+The comparison is constant-time (`subtle::ConstantTimeEq`). Missing
+header or wrong key returns `401 Unauthorized`. When the config value
+is empty, no header is required — this is the dev default.
+
+Cortex-side config (YAML):
+
+```yaml
+cortex:
+  shadow:
+    api_key: "s3cret"  # empty = no auth
+```
 
 ## Endpoints
 
@@ -238,7 +260,6 @@ curl -N -X POST http://localhost:8443/shadow/v1/conversations/$CONV/messages:str
 
 ## Future versions
 
-- **v0.4 — Auth**: API key on every shadow request
 - **v0.4 — Persistent history**: conversations survive cortex restart
   (backed by hippocampus lobe)
 - **v0.5 — Media**: `/shadow/v1/media/{lobe}` for WebRTC voice/video
