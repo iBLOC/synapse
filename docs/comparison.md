@@ -32,11 +32,13 @@ protocols, and WASM sandboxing.
 | WASM deployment | ✅ Native | ❌ | ❌ | ❌ |
 | Cross-platform (native + WASM) | ✅ | ❌ | ❌ | ❌ |
 | Memory management | ❌ (0.3.x) | ✅ | ⚠️ | ✅ Built-in |
-| OpenTelemetry observability | ❌ (0.3.x) | ✅ | ⚠️ | ✅ Native |
+| OpenTelemetry observability | ✅ Span/Trace (0.4) | ✅ | ⚠️ | ✅ Native |
+| Strongly-typed Lambda | ✅ (0.4) | ❌ | ✅ | ❌ |
+| LCEL-style pipe | ✅ (0.4) | ✅ | ❌ | ❌ |
 | Declarative YAML orchestration | ❌ | ⚠️ Partial | ⚠️ | ✅ |
 | Built-in caching | ❌ | ✅ | ⚠️ | ✅ |
 | Constraint enforcement | ❌ | ❌ | ❌ | ✅ |
-| Tests | ~182 | N/A | N/A | N/A |
+| Tests | ~310 | N/A | N/A | N/A |
 
 ## Synapse's Unique Strengths
 
@@ -45,7 +47,10 @@ protocols, and WASM sandboxing.
 3. **MCP HTTP** — Support both stdio and HTTP transports.
 4. **MultiAgent coverage** — All 4 patterns in one consistent API.
 5. **Type safety** — Rust's type system catches agent wiring errors at compile time.
-6. **Apache 2.0** — Open source license.
+6. **Strongly-typed Lambda** — Eino-style type-safe composition (new in 0.4).
+7. **LCEL-style pipe** — LangChain-style chainable expressions (new in 0.4).
+8. **Span/Trace observability** — BeeAI-style tracing with pluggable exporters (new in 0.4).
+9. **Apache 2.0** — Open source license.
 
 ## Synapse's Limitations
 
@@ -53,8 +58,15 @@ protocols, and WASM sandboxing.
 2. **Vector stores** — Currently in-memory only.
 3. **Streaming** — Partial support.
 4. **Memory management** — Not yet built-in (planned 0.3.x).
-5. **Observability** — OpenTelemetry integration not yet (planned 0.3.x).
+5. **OpenTelemetry exporter** — Custom exporters needed for OTel (planned).
 6. **Community** — New project, smaller community.
+
+## New in 0.4
+
+- **[Typed Lambda](./guide/typed-lambda.md)** — Eino-style strongly-typed Lambda composition.
+- **[LCEL Pipe](./guide/lcel-pipe.md)** — LangChain-style chainable expressions.
+- **[Observability](./guide/observability.md)** — BeeAI-style Span/Trace with exporters.
+- **[Framework Alignment](./guide/framework-alignment.md)** — How Synapse aligns with Eino, BeeAI, LangChain.
 
 ## When to Choose Synapse
 

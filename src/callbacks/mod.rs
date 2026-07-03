@@ -1,5 +1,21 @@
 use std::sync::Arc;
 
+pub mod observability;
+
+#[cfg(feature = "opentelemetry")]
+pub mod opentelemetry_exporter;
+
+pub use observability::{
+    ActiveSpan, MemoryExporter, Metrics, MetricsHandler, MetricsSnapshot, Span, SpanExporter,
+    SpanStatus, StdoutExporter, Tracer, TracerHandler,
+};
+
+#[cfg(feature = "opentelemetry")]
+pub use opentelemetry_exporter::{
+    init_otel_provider, init_otel_provider_with_attrs, set_global_provider, OtelError,
+    OtelSpanExporter,
+};
+
 pub type CallbackResult = Result<(), CallbackError>;
 
 #[derive(Debug, thiserror::Error)]

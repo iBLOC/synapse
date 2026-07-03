@@ -1,12 +1,16 @@
 pub mod context;
 pub mod error;
 pub mod lambda;
+pub mod pipe;
 pub mod stream;
+pub mod typed_lambda;
 
 pub use context::{Context, Handler, RunInfo};
 pub use error::{RunnableError, RunnableResult};
 pub use lambda::{invokable_lambda, Lambda};
-pub use stream::{channel, from_array, merge, pipe, StreamError, StreamReader, StreamWriter};
+pub use pipe::{pipe, prompt_template, string_parser, json_parser, JsonOutputParser, Pipe, PromptTemplate, Sequence, StringOutputParser};
+pub use stream::{channel, from_array, merge, pipe as stream_pipe, StreamError, StreamReader, StreamWriter};
+pub use typed_lambda::{lambda as typed_lambda_fn, Parallel, Router, TypedLambda};
 
 use std::pin::Pin;
 use std::sync::Arc;
