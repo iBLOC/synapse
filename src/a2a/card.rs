@@ -8,8 +8,8 @@ pub type Modality = String;
 /// Capability strings describe what the agent can DO. They are
 /// free-form, lowercase, hyphen-separated. Examples:
 /// - "mcp:github"        — uses github MCP
-/// - "memory:recall"     — can recall from hippocampus
-/// - "memory:store"      — can store to hippocampus
+/// - "memory:recall"     — can recall from memory store
+/// - "memory:store"      — can store to memory store
 /// - "face-recognition"  — supports face detection/match
 /// - "object-detection"  — supports object detection
 /// - "sensor-ingest"     — accepts sensor stream input
@@ -61,7 +61,7 @@ pub struct AgentCard {
     pub provider: Option<Provider>,
     pub capabilities: Capabilities,
     /// What this agent accepts, produces, and can do. Synapse
-    /// extension to the a2a-rs AgentCard; shadow apps read this
+    /// extension to the a2a-rs AgentCard; applications read this
     /// to know which modalities to use and which capabilities to
     /// expose to the user.
     #[serde(default)]

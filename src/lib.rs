@@ -3,6 +3,7 @@ pub mod adk;
 pub mod agent;
 pub mod callbacks;
 pub mod channels;
+pub mod coding_tools;
 pub mod components;
 pub mod compose;
 pub mod llm;

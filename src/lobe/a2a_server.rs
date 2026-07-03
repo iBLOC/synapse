@@ -1,6 +1,6 @@
 //! Build an axum router exposing the lobe's A2A endpoints.
 //!
-//! Wraps `synapse::a2a::server::A2AServerBuilder` plus the cortex-style
+//! Wraps `synapse::a2a::server::A2AServerBuilder` plus the standard
 //! endpoints: `GET /.well-known/agent.json`, `POST /a2a/tasks/send`,
 //! `GET /a2a/tasks/{id}`, `POST /a2a/tasks/{id}/cancel`.
 

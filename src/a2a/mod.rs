@@ -15,8 +15,7 @@
 //! The v0.1 hand-rolled types `A2AClient`, `A2AServer`, `TaskHandler`,
 //! `A2AError`, `A2AResult` are re-exported at the bottom of this
 //! module, marked `#[deprecated]`. They are kept in place so that
-//! downstream callers (e.g. `cortex/`, `prefrontal/`) built against
-//! v0.1 continue to compile unchanged.
+//! downstream callers built against v0.1 continue to compile unchanged.
 
 pub mod card;
 pub mod protocol;
@@ -27,8 +26,8 @@ pub mod server;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod client;
 
-// v0.1 compat: the entire hand-rolled A2A stack was used by cortex/ and
-// prefrontal/ before v0.2. We re-export the v0.1 symbols here, marked
+// v0.1 compat: the entire hand-rolled A2A stack was used by downstream
+// projects before v0.2. We re-export the v0.1 symbols here, marked
 // deprecated, so downstream code continues to compile without immediate
 // churn. New code should use v0.2 wrappers above. Listed FIRST so
 // `pub use v1_compat::*` doesn't get shadowed by the v0.2 re-exports below.

@@ -4,9 +4,9 @@
 //! use synapse::lobe::*;
 //!
 //! let app = LobeApp::builder()
-//!     .name("temporal")
+//!     .name("my_agent")
 //!     .bind("0.0.0.0:8091")
-//!     .skill("voice_dialog", Arc::new(MyVoiceSkill::new()))
+//!     .skill("my_skill", Arc::new(MySkill::new()))
 //!     .build();
 //! app.run().await?;
 //! ```
@@ -18,7 +18,7 @@ use axum::Router;
 use tokio::net::TcpListener;
 
 use crate::a2a::card::AgentCard;
-use crate::lobe::{build_a2a_router, register_with_cortex, StatelessSkillRouter};
+use crate::lobe::{build_a2a_router, register_with_registry, StatelessSkillRouter};
 
 pub struct LobeApp {
     pub name: String,
@@ -91,13 +91,13 @@ impl LobeApp {
         build_a2a_router(self.card.clone(), Arc::clone(&self.skills))
     }
 
-    /// Run: register with cortex, serve axum, wait for Ctrl-C.
+    /// Run: register with service registry, serve axum, wait for Ctrl-C.
     pub async fn run(self) -> Result<(), String> {
-        if let Ok(cortex_url) = std::env::var("CORTEX_URL") {
-            if let Err(e) = register_with_cortex(&cortex_url, &self.card).await {
-                tracing::warn!("cortex registration failed: {e}");
+        if let Ok(registry_url) = std::env::var("REGISTRY_URL") {
+            if let Err(e) = register_with_registry(&registry_url, &self.card).await {
+                tracing::warn!("service registration failed: {e}");
             } else {
-                tracing::info!("registered with cortex at {cortex_url}");
+                tracing::info!("registered with service registry at {registry_url}");
             }
         }
 

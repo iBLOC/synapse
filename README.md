@@ -233,13 +233,6 @@ cargo test
 - **WASM** (`--target wasm32-wasip2`): `WasiHttpClient` 让 agent 在 WASM 沙箱中运行（通过 host function 调用 HTTP）。A2A server 在 native, agent WASM 通过 `synapse:host/a2a-call` import 调用外部 peer
 - **Agent template** (`templates/agent/`): 用户级 entrypoint, `cargo build --release --target wasm32-wasip2` 产出可加载的 `.wasm`
 
-## 🌐 相关项目
-
-- **神经突触 Synapse**（本项目）— Agent 开发工具包
-- **神经元 Neuron** — LLM 运行时
-- **前额叶 PFC** — 多 agent 编排 + WASM 隔离运行时
-- **大脑皮层 Cortex** (`/home/ibloc/Projects/cortex`) — Layer 3.5 单 shadow 中心化 agent 注册 + A2A gateway + WASM 宿主（重度依赖 synapse::a2a 和 synapse::wasm）
-
 ## 📚 文档
 
 完整使用文档：<https://synapse-rs.github.io/synapse/>

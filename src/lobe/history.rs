@@ -1,7 +1,7 @@
 //! `HistorySummarizer` — appends turns and triggers LLM summarization on overflow.
 //!
 //! Stateless: each call takes a prev summary + new turn, returns an
-//! updated summary. Caller (cortex) persists the result.
+//! updated summary. Caller persists the result.
 
 use std::sync::Arc;
 

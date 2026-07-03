@@ -8,9 +8,8 @@
 //! - `WasmRuntime` — actual wasmtime execution environment
 //! - `AgentInstance` / `InstanceManager` — running instances
 //!
-//! This module is **independent of any Layer 3 runtime** (Prefrontal, IronClaw,
-//! Vercel Eve, etc.). Layer 3 projects only add platform glue (HTTP API,
-//! discovery, persistence).
+//! This module is **independent of any Layer 3 runtime**. Layer 3
+//! projects only add platform glue (HTTP API, discovery, persistence).
 
 pub mod package;
 pub mod registry;

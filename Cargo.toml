@@ -46,6 +46,10 @@ dashmap = "5"
 # Regex for pattern matching
 regex = "1"
 
+# File watcher for config hot-reload
+notify = "7"
+serde_yaml = "0.9"
+
 # WASM runtime (always available — agents run in WASM by default)
 wasmtime = "20"
 wat = "1"
@@ -68,6 +72,7 @@ tokio-stream = "0.1"
 [dev-dependencies]
 tokio-test = "0.4"
 mockito = "1"
+tempfile = "3"
 
 [features]
 default = []

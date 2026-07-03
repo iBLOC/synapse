@@ -3,8 +3,7 @@
 //! v0.2 of `synapse::a2a` adopts the official `a2a-rs` SDK for wire
 //! traffic, replacing the hand-rolled JSON-RPC stack that v0.1
 //! exposed as `synapse::a2a::{A2AClient, A2AServer, TaskHandler,
-//! A2AError, A2AResult}`. Those types were already used by
-//! downstream `cortex/` and `prefrontal/`.
+//! A2AError, A2AResult}`.
 //!
 //! This module re-implements the v0.1 surface as a thin adapter on
 //! top of the v0.2 SDK so downstream callers continue to compile
