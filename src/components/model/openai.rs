@@ -440,12 +440,98 @@ impl BaseChatModel for OpenAIModel {
 
     async fn stream(
         &self,
-        _messages: Vec<Message>,
-        _options: GenerateOptions,
+        messages: Vec<Message>,
+        options: GenerateOptions,
     ) -> Result<StreamReader, ModelError> {
-        Err(ModelError::Api(
-            "OpenAIModel::stream not yet implemented; use stream_deltas".to_string(),
-        ))
+        let model_name = options
+            .model
+            .clone()
+            .unwrap_or_else(|| "gpt-3.5-turbo".to_string());
+
+        let body = serde_json::json!({
+            "model": model_name,
+            "stream": true,
+            "stream_options": { "include_usage": true },
+            "messages": messages.iter().map(|m| serde_json::json!({
+                "role": m.role.as_str(),
+                "content": match &m.content {
+                    crate::schema::Content::Text(s) => s.clone(),
+                    _ => String::new(),
+                }
+            })).collect::<Vec<_>>(),
+        });
+
+        let url = format!("{}/chat/completions", self.base_url);
+        let http = self.http.clone();
+        let api_key = self.api_key.clone();
+
+        let (writer, reader) = StreamReader::new(64);
+
+        tokio::spawn(async move {
+            let sse_result = http
+                .sse_post(
+                    &url,
+                    vec![
+                        ("Authorization".to_string(), format!("Bearer {}", api_key)),
+                        ("Content-Type".to_string(), "application/json".to_string()),
+                    ],
+                    serde_json::to_vec(&body).unwrap_or_default(),
+                )
+                .await;
+
+            let mut sse = match sse_result {
+                Ok(s) => s,
+                Err(e) => {
+                    let _ = writer.send_error(ModelError::Api(e.to_string())).await;
+                    return;
+                }
+            };
+
+            let mut accumulated = String::new();
+            while let Some(event_res) = sse.next().await {
+                let event = match event_res {
+                    Ok(e) => e,
+                    Err(e) => {
+                        let _ = writer
+                            .send_error(ModelError::StreamError(e.to_string()))
+                            .await;
+                        return;
+                    }
+                };
+
+                if event.data.trim() == "[DONE]" {
+                    if !accumulated.is_empty() {
+                        let _ = writer
+                            .send_value(Message::assistant(std::mem::take(&mut accumulated)))
+                            .await;
+                    }
+                    return;
+                }
+
+                let v: serde_json::Value = match serde_json::from_str(&event.data) {
+                    Ok(v) => v,
+                    Err(_) => continue,
+                };
+
+                if let Some(delta) = v
+                    .get("choices")
+                    .and_then(|c| c.get(0))
+                    .and_then(|c| c.get("delta"))
+                    .and_then(|d| d.get("content"))
+                    .and_then(|c| c.as_str())
+                {
+                    accumulated.push_str(delta);
+                }
+            }
+
+            if !accumulated.is_empty() {
+                let _ = writer
+                    .send_value(Message::assistant(accumulated))
+                    .await;
+            }
+        });
+
+        Ok(reader)
     }
 
     async fn stream_deltas(

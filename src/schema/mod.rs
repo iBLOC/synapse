@@ -144,7 +144,19 @@ impl Message {
 
         let parts = match self.content {
             Content::Text(text) => vec![a2a::Part::text(text)],
-            _ => vec![], // TODO: map other content types
+            Content::Image { url } => {
+                vec![a2a::Part::url(url).with_media_type("image/png")]
+            }
+            Content::Audio { url } => {
+                vec![a2a::Part::url(url).with_media_type("audio/wav")]
+            }
+            Content::Video { url } => {
+                vec![a2a::Part::url(url).with_media_type("video/mp4")]
+            }
+            Content::Parts(content_parts) => content_parts
+                .into_iter()
+                .map(|p| content_part_to_a2a_part(p))
+                .collect(),
         };
 
         a2a::Message {
@@ -172,7 +184,24 @@ impl Message {
             .into_iter()
             .filter_map(|p| match p.content {
                 a2a::PartContent::Text(text) => Some(text),
-                _ => None,
+                a2a::PartContent::Url(url) => {
+                    match p.media_type.as_deref() {
+                        Some(m) if m.starts_with("image/") => {
+                            Some(format!("[image: {}]", url))
+                        }
+                        Some(m) if m.starts_with("audio/") => {
+                            Some(format!("[audio: {}]", url))
+                        }
+                        Some(m) if m.starts_with("video/") => {
+                            Some(format!("[video: {}]", url))
+                        }
+                        _ => Some(url),
+                    }
+                }
+                a2a::PartContent::Data(value) => {
+                    Some(serde_json::to_string(&value).unwrap_or_default())
+                }
+                a2a::PartContent::Raw(_) => None,
             })
             .collect::<Vec<_>>()
             .join("\n");
@@ -183,6 +212,26 @@ impl Message {
             name: None,
             tool_call_id: None,
             tool_calls: None,
+        }
+    }
+}
+
+fn content_part_to_a2a_part(part: ContentPart) -> a2a::Part {
+    match part.part_type.as_str() {
+        "text" => {
+            let text = part.text.unwrap_or_default();
+            a2a::Part::text(text)
+        }
+        "image_url" => {
+            let url = part
+                .image_url
+                .map(|iu| iu.url)
+                .unwrap_or_default();
+            a2a::Part::url(url).with_media_type("image/png")
+        }
+        _ => {
+            let text = part.text.unwrap_or_default();
+            a2a::Part::text(text)
         }
     }
 }

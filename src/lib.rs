@@ -6,6 +6,7 @@ pub mod channels;
 pub mod components;
 pub mod compose;
 pub mod llm;
+pub mod lobe;
 pub mod mcp;
 pub mod protocol;
 pub mod providers;

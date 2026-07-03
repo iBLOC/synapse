@@ -122,11 +122,51 @@ impl AgentCard {
     /// (synthesizing `text/plain`, `audio/wav`, etc. labels); capabilities
     /// are dropped (the SDK doesn't have a generic capabilities field).
     pub fn into_a2a_card(self) -> a2a::AgentCard {
+        let supported_interfaces = if self.url.is_empty() {
+            vec![]
+        } else {
+            // The Synapse AgentCard carries a single endpoint URL.
+            // Expose it as a JSON-RPC 0.3 interface; the SDK's wire
+            // is JSON-RPC 2.0 so clients that already speak JSON-RPC
+            // can connect without extra negotiation.
+            vec![a2a::AgentInterface {
+                url: self.url.clone(),
+                protocol_binding: a2a::TRANSPORT_PROTOCOL_JSONRPC.to_string(),
+                protocol_version: "0.3".to_string(),
+                tenant: None,
+            }]
+        };
+
+        let skills = self
+            .skills
+            .as_ref()
+            .map(|skills| {
+                skills
+                    .iter()
+                    .map(|s| a2a::AgentSkill {
+                        id: s.id.clone(),
+                        name: s.name.clone(),
+                        description: String::new(),
+                        tags: Vec::new(),
+                        examples: None,
+                        input_modes: None,
+                        output_modes: None,
+                        security_requirements: None,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let security_schemes = self
+            .authentication
+            .as_ref()
+            .and_then(synapse_auth_to_a2a_schemes);
+
         a2a::AgentCard {
             name: self.name,
             description: self.description,
             version: self.version,
-            supported_interfaces: vec![], // TODO: map interfaces
+            supported_interfaces,
             capabilities: a2a::AgentCapabilities {
                 streaming: Some(self.capabilities.streaming),
                 push_notifications: Some(self.capabilities.push_notifications),
@@ -135,14 +175,14 @@ impl AgentCard {
             },
             default_input_modes: modality_to_modes(&self.metadata.input_modalities),
             default_output_modes: modality_to_modes(&self.metadata.output_modalities),
-            skills: vec![], // TODO: map skills
+            skills,
             provider: self.provider.map(|p| a2a::AgentProvider {
                 organization: p.organization,
                 url: p.url.unwrap_or_default(),
             }),
             documentation_url: None,
             icon_url: None,
-            security_schemes: None,
+            security_schemes,
             security_requirements: None,
             signatures: None,
         }
@@ -150,10 +190,43 @@ impl AgentCard {
 
     /// Convert from the a2a-rs SDK's AgentCard type.
     pub fn from_a2a_card(card: a2a::AgentCard) -> Self {
+        // Recover the URL from the first supported interface (we
+        // only ever wrote one). A remote card with multiple
+        // interfaces will have its first one adopted; clients that
+        // need a specific interface should rebuild from JSON.
+        let url = card
+            .supported_interfaces
+            .first()
+            .map(|i| i.url.clone())
+            .unwrap_or_default();
+
+        // Map the SDK's security schemes back into the Synapse
+        // Authentication enum. Only the first recognized scheme
+        // is preserved; heterogeneous scheme lists collapse to
+        // the most specific one Synapse can express.
+        let authentication = card
+            .security_schemes
+            .as_ref()
+            .and_then(a2a_schemes_to_synapse_auth);
+
+        let skills = if card.skills.is_empty() {
+            None
+        } else {
+            Some(
+                card.skills
+                    .into_iter()
+                    .map(|s| SkillReference {
+                        id: s.id,
+                        name: s.name,
+                    })
+                    .collect(),
+            )
+        };
+
         Self {
             name: card.name,
             description: card.description,
-            url: String::new(), // SDK doesn't have url field
+            url,
             version: card.version,
             provider: card.provider.map(|p| Provider {
                 organization: p.organization,
@@ -169,10 +242,90 @@ impl AgentCard {
                 output_modalities: modes_to_modality(&card.default_output_modes),
                 capabilities: Vec::new(),
             },
-            authentication: None, // TODO: map authentication
-            skills: None,
+            authentication,
+            skills,
         }
     }
+}
+
+/// Map a Synapse `Authentication` to the a2a-rs `HashMap<String,
+/// SecurityScheme>` shape. Returns `None` for `Authentication::None`
+/// (no scheme published).
+fn synapse_auth_to_a2a_schemes(
+    auth: &Authentication,
+) -> Option<std::collections::HashMap<String, a2a::SecurityScheme>> {
+    use a2a::SecurityScheme;
+    use std::collections::HashMap;
+    let scheme = match auth {
+        Authentication::None => return None,
+        Authentication::ApiKey { header, value: _ } => {
+            // The Synapse representation collapses header + value
+            // into a single string; the SDK keeps them separate.
+            // We emit a placeholder API-key scheme with the header
+            // name and an empty token — clients should use mTLS or
+            // out-of-band credentials for actual values.
+            SecurityScheme::ApiKey(a2a::ApiKeySecurityScheme {
+                location: "header".to_string(),
+                name: header.clone(),
+                description: Some("API key authentication".to_string()),
+            })
+        }
+        Authentication::Bearer { token: _ } => {
+            SecurityScheme::HttpAuth(a2a::HttpAuthSecurityScheme {
+                scheme: "bearer".to_string(),
+                description: Some("Bearer token authentication".to_string()),
+                bearer_format: Some("JWT".to_string()),
+            })
+        }
+        Authentication::Basic { username, password: _ } => {
+            SecurityScheme::HttpAuth(a2a::HttpAuthSecurityScheme {
+                scheme: "basic".to_string(),
+                description: Some(format!("Basic auth for {username}")),
+                bearer_format: None,
+            })
+        }
+    };
+    let mut map = HashMap::new();
+    map.insert("default".to_string(), scheme);
+    Some(map)
+}
+
+/// Inverse of [`synapse_auth_to_a2a_schemes`]: pull the first
+/// recognized scheme out of an a2a-rs security map and produce
+/// a Synapse `Authentication`. Unknown scheme variants collapse
+/// to `Authentication::None`.
+fn a2a_schemes_to_synapse_auth(
+    schemes: &std::collections::HashMap<String, a2a::SecurityScheme>,
+) -> Option<Authentication> {
+    use a2a::SecurityScheme;
+    let scheme = schemes.values().next()?;
+    Some(match scheme {
+        SecurityScheme::ApiKey(s) => Authentication::ApiKey {
+            header: s.name.clone(),
+            value: String::new(),
+        },
+        SecurityScheme::HttpAuth(s) if s.scheme.eq_ignore_ascii_case("bearer") => {
+            Authentication::Bearer {
+                token: String::new(),
+            }
+        }
+        SecurityScheme::HttpAuth(s) if s.scheme.eq_ignore_ascii_case("basic") => {
+            Authentication::Basic {
+                username: String::new(),
+                password: String::new(),
+            }
+        }
+        SecurityScheme::HttpAuth(_) | SecurityScheme::OAuth2(_)
+        | SecurityScheme::OpenIdConnect(_) | SecurityScheme::MutualTls(_) => {
+            // Synapse doesn't have first-class variants for these.
+            // Round-trip them as a bearer token (client + server
+            // negotiate the actual mechanism via the documented
+            // scheme name).
+            Authentication::Bearer {
+                token: String::new(),
+            }
+        }
+    })
 }
 
 fn modality_to_modes(mods: &[Modality]) -> Vec<String> {

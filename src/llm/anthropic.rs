@@ -1,6 +1,8 @@
 use crate::components::model::{BaseChatModel, GenerateOptions, ModelError, ModelResult};
+use crate::components::model::{StreamReader, StreamWriter};
 use crate::schema::{Content, Message, RoleType};
 use crate::transport::HttpClient;
+use crate::transport::HttpClientSse;
 use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
@@ -11,7 +13,7 @@ const DEFAULT_MODEL: &str = "claude-3-5-sonnet-20241022";
 const DEFAULT_MAX_TOKENS: u32 = 1024;
 
 pub struct AnthropicClient {
-    http: Arc<dyn HttpClient>,
+    http: Arc<dyn HttpClientSse>,
     api_key: String,
     base_url: String,
     model: String,
@@ -19,7 +21,7 @@ pub struct AnthropicClient {
 }
 
 impl AnthropicClient {
-    pub fn new(http: Arc<dyn HttpClient>, api_key: impl Into<String>) -> Self {
+    pub fn new(http: Arc<dyn HttpClientSse>, api_key: impl Into<String>) -> Self {
         Self {
             http,
             api_key: api_key.into(),
@@ -93,8 +95,8 @@ impl BaseChatModel for AnthropicClient {
         let (_system, body) = self.build_request_body(&messages);
         let url = format!("{}/v1/messages", self.base_url);
 
-        let resp: serde_json::Value = self
-            .http
+        let http_client: &dyn HttpClient = self.http.as_ref();
+        let resp: serde_json::Value = http_client
             .post_json_with_headers(
                 &url,
                 &[
@@ -141,11 +143,87 @@ impl BaseChatModel for AnthropicClient {
 
     async fn stream(
         &self,
-        _messages: Vec<Message>,
+        messages: Vec<Message>,
         _options: GenerateOptions,
-    ) -> ModelResult<crate::components::model::StreamReader> {
-        Err(ModelError::Api(
-            "AnthropicClient::stream not yet implemented".to_string(),
-        ))
+    ) -> ModelResult<StreamReader> {
+        let (_system, mut body) = self.build_request_body(&messages);
+        body["stream"] = json!(true);
+
+        let url = format!("{}/v1/messages", self.base_url);
+        let api_key = self.api_key.clone();
+
+        let sse = self
+            .http
+            .sse_post(
+                &url,
+                vec![
+                    ("x-api-key".to_string(), api_key),
+                    ("anthropic-version".to_string(), ANTHROPIC_VERSION.to_string()),
+                    ("Content-Type".to_string(), "application/json".to_string()),
+                ],
+                serde_json::to_vec(&body).unwrap_or_default(),
+            )
+            .await
+            .map_err(|e| ModelError::StreamError(e.to_string()))?;
+
+        let (writer, reader) = StreamReader::new(64);
+
+        tokio::spawn(async move {
+            let mut sse = sse;
+            let mut accumulated = String::new();
+            while let Some(event_res) = sse.next().await {
+                let event = match event_res {
+                    Ok(e) => e,
+                    Err(e) => {
+                        let _ = writer.send_error(ModelError::StreamError(e.to_string())).await;
+                        return;
+                    }
+                };
+
+                let v: serde_json::Value = match serde_json::from_str(&event.data) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let _ = writer
+                            .send_error(ModelError::StreamError(format!("JSON parse error: {e}")))
+                            .await;
+                        return;
+                    }
+                };
+
+                let event_type = v.get("type").and_then(|t| t.as_str()).unwrap_or("");
+
+                match event_type {
+                    "content_block_delta" => {
+                        if let Some(text) = v
+                            .get("delta")
+                            .and_then(|d| d.get("text"))
+                            .and_then(|t| t.as_str())
+                        {
+                            accumulated.push_str(text);
+                        }
+                    }
+                    "message_stop" => {
+                        let _ = writer
+                            .send_value(Message::assistant(std::mem::take(&mut accumulated)))
+                            .await;
+                        return;
+                    }
+                    "error" => {
+                        let msg = v
+                            .get("error")
+                            .and_then(|e| e.get("message"))
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("unknown error");
+                        let _ = writer
+                            .send_error(ModelError::Api(format!("Anthropic error: {msg}")))
+                            .await;
+                        return;
+                    }
+                    _ => {}
+                }
+            }
+        });
+
+        Ok(reader)
     }
 }
