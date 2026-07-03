@@ -43,10 +43,10 @@ impl<M: BaseChatModel + Send + Sync + 'static> Agent for RouterSupervisor<M> {
 
     async fn resume(
         &self,
-        _checkpoint: Vec<u8>,
-        _info: ResumeInfo,
+        checkpoint: Vec<u8>,
+        info: ResumeInfo,
     ) -> AgentResult<AgentEvent> {
-        Err(AgentError::Agent("Resume not implemented".to_string()))
+        self.inner.resume(checkpoint, info).await
     }
 }
 

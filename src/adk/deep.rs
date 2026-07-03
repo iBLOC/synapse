@@ -3,6 +3,18 @@ use crate::components::model::BaseChatModel;
 use async_trait::async_trait;
 use std::sync::Arc;
 
+#[derive(serde::Serialize, serde::Deserialize)]
+enum DeepPhase {
+    Decompose,
+    Execute {
+        index: usize,
+        subtasks: Vec<String>,
+        results: Vec<String>,
+        messages: Vec<crate::schema::Message>,
+    },
+    Synthesize { results: String, task: String },
+}
+
 pub struct DeepAgent<M: BaseChatModel> {
     name: String,
     description: String,
@@ -146,10 +158,74 @@ impl<M: BaseChatModel + Send + Sync + 'static> Agent for DeepAgent<M> {
 
     async fn resume(
         &self,
-        _checkpoint: Vec<u8>,
-        _info: crate::adk::agent::ResumeInfo,
+        checkpoint: Vec<u8>,
+        info: crate::adk::agent::ResumeInfo,
     ) -> Result<AgentEvent, AgentError> {
-        Err(AgentError::Agent("Resume not implemented".to_string()))
+        let phase: DeepPhase = serde_json::from_slice(&checkpoint)
+            .map_err(|e| AgentError::Agent(format!("Invalid checkpoint: {e}")))?;
+
+        match phase {
+            DeepPhase::Decompose => {
+                let task = info.user_input;
+                let subtasks = self.decompose_task(&task).await?;
+                let mut messages = vec![];
+                let results = self.execute_subtasks(subtasks, &mut messages).await?;
+                let final_response = self.synthesize(&results, &task).await?;
+                Ok(AgentEvent {
+                    agent_name: self.name.clone(),
+                    output: AgentOutput {
+                        message: Some(final_response),
+                        action: None,
+                    },
+                    error: None,
+                })
+            }
+            DeepPhase::Execute {
+                index,
+                subtasks,
+                mut results,
+                mut messages,
+            } => {
+                let task = info.user_input;
+                messages.push(crate::schema::Message::user(task.clone()));
+                for i in index..subtasks.len() {
+                    let prompt =
+                        format!("Subtask {}/{}: {}", i + 1, subtasks.len(), subtasks[i]);
+                    messages.push(crate::schema::Message::user(prompt));
+                    let options = crate::components::model::GenerateOptions::default();
+                    let response = self
+                        .model
+                        .generate(messages.clone(), options)
+                        .await
+                        .map_err(|e| AgentError::Agent(e.to_string()))?;
+                    messages.push(response.clone());
+                    if let crate::schema::Content::Text(text) = response.content {
+                        results.push(format!("Subtask {}: {}", i + 1, text));
+                    }
+                }
+                let all_results = results.join("\n\n");
+                let final_response = self.synthesize(&all_results, &task).await?;
+                Ok(AgentEvent {
+                    agent_name: self.name.clone(),
+                    output: AgentOutput {
+                        message: Some(final_response),
+                        action: None,
+                    },
+                    error: None,
+                })
+            }
+            DeepPhase::Synthesize { results, task } => {
+                let final_response = self.synthesize(&results, &task).await?;
+                Ok(AgentEvent {
+                    agent_name: self.name.clone(),
+                    output: AgentOutput {
+                        message: Some(final_response),
+                        action: None,
+                    },
+                    error: None,
+                })
+            }
+        }
     }
 }
 
@@ -255,9 +331,24 @@ impl<M: BaseChatModel + Send + Sync + 'static> Agent for Supervisor<M> {
 
     async fn resume(
         &self,
-        _checkpoint: Vec<u8>,
-        _info: crate::adk::agent::ResumeInfo,
+        checkpoint: Vec<u8>,
+        info: crate::adk::agent::ResumeInfo,
     ) -> Result<AgentEvent, AgentError> {
-        Err(AgentError::Agent("Resume not implemented".to_string()))
+        #[derive(serde::Deserialize)]
+        struct SupervisorCheckpoint {
+            agent_name: String,
+            inner_checkpoint: Vec<u8>,
+        }
+        let state: SupervisorCheckpoint = serde_json::from_slice(&checkpoint)
+            .map_err(|e| AgentError::Agent(format!("Invalid checkpoint: {e}")))?;
+        for (name, agent) in &self.sub_agents {
+            if name == &state.agent_name {
+                return agent.resume(state.inner_checkpoint, info).await;
+            }
+        }
+        Err(AgentError::Agent(format!(
+            "Agent {} not found",
+            state.agent_name
+        )))
     }
 }

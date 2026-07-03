@@ -464,10 +464,13 @@ impl<M: BaseChatModel + Send + Sync + 'static, T: InvokableTool + Send + Sync + 
 
     async fn resume(
         &self,
-        _checkpoint: Vec<u8>,
-        _info: crate::adk::agent::ResumeInfo,
+        checkpoint: Vec<u8>,
+        info: crate::adk::agent::ResumeInfo,
     ) -> Result<AgentEvent, AgentError> {
-        Err(AgentError::Agent("Resume not implemented".to_string()))
+        let mut messages: Vec<Message> = serde_json::from_slice(&checkpoint)
+            .map_err(|e| AgentError::Agent(format!("Invalid checkpoint: {e}")))?;
+        messages.push(Message::user(info.user_input));
+        self.run_loop(messages).await
     }
 }
 

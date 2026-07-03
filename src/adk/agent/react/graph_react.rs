@@ -73,10 +73,47 @@ impl Agent for GraphReActAgent {
 
     async fn resume(
         &self,
-        _checkpoint: Vec<u8>,
-        _info: crate::adk::agent::ResumeInfo,
+        checkpoint: Vec<u8>,
+        info: crate::adk::agent::ResumeInfo,
     ) -> AgentResult<AgentEvent> {
-        Err(AgentError::Agent("Resume not implemented".to_string()))
+        let mut history: Vec<Message> = serde_json::from_slice(&checkpoint)
+            .map_err(|e| AgentError::Agent(format!("Invalid checkpoint: {e}")))?;
+        history.push(Message::user(info.user_input));
+
+        for _ in 0..self.max_steps {
+            let response = self
+                .compiled_graph
+                .invoke(Context::new(), history.clone())
+                .await
+                .map_err(|e| AgentError::Agent(e.to_string()))?;
+
+            let tool_calls = response.tool_calls.clone().unwrap_or_default();
+            if tool_calls.is_empty() {
+                return Ok(AgentEvent {
+                    agent_name: self.name.clone(),
+                    output: AgentOutput {
+                        message: Some(response),
+                        action: None,
+                    },
+                    error: None,
+                });
+            }
+
+            history.push(response.clone());
+
+            let tools_node = self.tools_node.as_ref().ok_or_else(|| {
+                AgentError::Agent("tool_calls present but no tools configured".to_string())
+            })?;
+
+            let tool_results: Vec<Message> = tools_node
+                .invoke(Context::new(), response)
+                .await
+                .map_err(|e| AgentError::Agent(e.to_string()))?;
+
+            history.extend(tool_results);
+        }
+
+        Err(AgentError::MaxIterationsExceeded)
     }
 }
 

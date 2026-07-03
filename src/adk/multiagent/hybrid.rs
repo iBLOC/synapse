@@ -23,7 +23,7 @@ use crate::adk::agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentOutput, AgentResult, ResumeInfo,
 };
 use crate::components::model::BaseChatModel;
-use crate::schema::{Content, FunctionCall, Message, RoleType, ToolCall, ToolInfo};
+use crate::schema::{Content, Message, RoleType, ToolCall, ToolInfo};
 
 const HYBRID_PROMPT_TEMPLATE: &str = include_str!("hybrid_system.md");
 
@@ -34,6 +34,14 @@ pub struct HybridSupervisor<M: BaseChatModel + 'static> {
     agents: HashMap<String, Arc<dyn Agent>>,
     max_iterations: usize,
     max_handoffs: usize,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct HybridCheckpoint {
+    messages: Vec<Message>,
+    iteration: usize,
+    handoff_count: usize,
+    forced_target: Option<String>,
 }
 
 impl<M: BaseChatModel + 'static> HybridSupervisor<M> {
@@ -168,10 +176,99 @@ impl<M: BaseChatModel + Send + Sync + 'static> Agent for HybridSupervisor<M> {
     }
     async fn resume(
         &self,
-        _checkpoint: Vec<u8>,
-        _info: ResumeInfo,
+        checkpoint: Vec<u8>,
+        info: ResumeInfo,
     ) -> AgentResult<AgentEvent> {
-        Err(AgentError::Agent("Resume not implemented".to_string()))
+        let state: HybridCheckpoint = serde_json::from_slice(&checkpoint)
+            .map_err(|e| AgentError::Agent(format!("Invalid checkpoint: {e}")))?;
+        let mut messages = state.messages;
+        messages.push(Message::user(info.user_input));
+        let mut iteration = state.iteration;
+        let mut handoff_count = state.handoff_count;
+        let mut forced_target = state.forced_target;
+
+        loop {
+            if iteration >= self.max_iterations {
+                return Err(AgentError::MaxIterationsExceeded);
+            }
+            iteration += 1;
+
+            let pending_calls: Vec<(String, String)> = if let Some(target) = forced_target.take() {
+                vec![(format!("route_to_{}", target), format!("handoff_{}", target))]
+            } else {
+                let options = crate::components::model::GenerateOptions {
+                    tools: Some(self.tool_infos()),
+                    ..Default::default()
+                };
+                let mut response = self
+                    .model
+                    .generate(messages.clone(), options)
+                    .await
+                    .map_err(|e| AgentError::Agent(e.to_string()))?;
+
+                let tool_calls_opt = response.tool_calls.take();
+                match tool_calls_opt {
+                    Some(tcs) if !tcs.is_empty() => {
+                        messages.push(response);
+                        tcs.into_iter()
+                            .map(|tc| (tc.function.name, tc.id))
+                            .collect()
+                    }
+                    _ => {
+                        return Ok(AgentEvent {
+                            agent_name: self.name.clone(),
+                            output: AgentOutput {
+                                message: Some(response),
+                                action: None,
+                            },
+                            error: None,
+                        });
+                    }
+                }
+            };
+
+            for (tool_name, tool_call_id) in pending_calls {
+                let agent_key = tool_name
+                    .strip_prefix("route_to_")
+                    .unwrap_or(&tool_name)
+                    .to_string();
+
+                let agent = match self.agents.get(&agent_key) {
+                    Some(a) => a.clone(),
+                    None => {
+                        messages.push(Message::tool(
+                            format!("unknown agent: {}", agent_key),
+                            tool_call_id,
+                        ));
+                        continue;
+                    }
+                };
+
+                let sub_input = AgentInput {
+                    messages: vec![Message::user(format!("[as {}] continue task", agent_key))],
+                    enable_streaming: false,
+                };
+                let sub_event = agent.run(sub_input).await?;
+                let sub_text = extract_text(&sub_event);
+                messages.push(Message::tool(sub_text, tool_call_id));
+
+                if let Some(target) = sub_event
+                    .output
+                    .action
+                    .as_ref()
+                    .and_then(|a| a.transfer_to.clone())
+                {
+                    if handoff_count >= self.max_handoffs {
+                        return Err(AgentError::Agent(format!(
+                            "max handoffs ({}) exceeded",
+                            self.max_handoffs
+                        )));
+                    }
+                    handoff_count += 1;
+                    forced_target = Some(target);
+                }
+            }
+        }
     }
 }
 

@@ -14,6 +14,7 @@ use async_trait::async_trait;
 use crate::adk::agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, ResumeInfo,
 };
+use crate::schema::Message;
 
 pub struct HandoffSupervisor {
     name: String,
@@ -21,6 +22,13 @@ pub struct HandoffSupervisor {
     agents: HashMap<String, Arc<dyn Agent>>,
     entry_point: String,
     max_handoffs: usize,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct HandoffCheckpoint {
+    current_agent: String,
+    messages: Vec<Message>,
+    handoff_count: usize,
 }
 
 impl HandoffSupervisor {
@@ -83,10 +91,51 @@ impl Agent for HandoffSupervisor {
 
     async fn resume(
         &self,
-        _checkpoint: Vec<u8>,
-        _info: ResumeInfo,
+        checkpoint: Vec<u8>,
+        info: ResumeInfo,
     ) -> AgentResult<AgentEvent> {
-        Err(AgentError::Agent("Resume not implemented".to_string()))
+        let state: HandoffCheckpoint = serde_json::from_slice(&checkpoint)
+            .map_err(|e| AgentError::Agent(format!("Invalid checkpoint: {e}")))?;
+        let mut messages = state.messages;
+        messages.push(Message::user(info.user_input));
+        let mut current = state.current_agent;
+        let mut handoff_count = state.handoff_count;
+
+        loop {
+            let agent = self.agents.get(&current).ok_or_else(|| {
+                AgentError::Agent(format!("handoff target '{}' not found", current))
+            })?;
+
+            let event = agent
+                .run(AgentInput {
+                    messages: messages.clone(),
+                    enable_streaming: false,
+                })
+                .await?;
+
+            let transfer_target = event
+                .output
+                .action
+                .as_ref()
+                .and_then(|a| a.transfer_to.clone());
+
+            match transfer_target {
+                Some(target) => {
+                    handoff_count += 1;
+                    if handoff_count > self.max_handoffs {
+                        return Err(AgentError::Agent(format!(
+                            "max handoffs ({}) exceeded",
+                            self.max_handoffs
+                        )));
+                    }
+                    if let Some(msg) = &event.output.message {
+                        messages.push(msg.clone());
+                    }
+                    current = target;
+                }
+                None => return Ok(event),
+            }
+        }
     }
 }
 
