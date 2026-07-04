@@ -25,6 +25,15 @@ impl<I: Send + 'static, O: Send + 'static> TypedLambda<I, O> {
     }
 }
 
+impl<I, O> Clone for TypedLambda<I, O> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            invoke_fn: self.invoke_fn.clone(),
+        }
+    }
+}
+
 impl<I, O> std::fmt::Debug for TypedLambda<I, O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TypedLambda").field("name", &self.name).finish()
@@ -167,10 +176,24 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "pre-existing issue: Parallel doesn't implement Runnable for tuple outputs"]
-    async fn test_parallel() {
-        // Disabled: Parallel doesn't implement Runnable for tuple outputs
-        // See https://github.com/synapse-rs/synapse/issues/XXX
+    async fn test_parallel_runs_both_branches() {
+        let upper = TypedLambda::<String, String>::new("upper", |_ctx, input: String| async move {
+            Ok(input.to_uppercase())
+        });
+        let len = TypedLambda::<String, i64>::new("len", |_ctx, input: String| async move {
+            Ok(input.len() as i64)
+        });
+        let par: Parallel<TypedLambda<String, String>, TypedLambda<String, i64>> =
+            Parallel::new(upper, len);
+
+        let ctx = Context::new();
+        use crate::compose::runnable::Runnable;
+        let result: (String, i64) =
+            Runnable::<String, (String, i64)>::invoke(&par, ctx, "hello".to_string())
+                .await
+                .unwrap();
+        assert_eq!(result.0, "HELLO");
+        assert_eq!(result.1, 5);
     }
 
     #[test]
