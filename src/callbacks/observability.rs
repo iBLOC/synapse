@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use super::{CallbackError, CallbackManager, CallbackResult, ComponentType, Handler, RunInfo, RunType};
+use super::{ComponentType, Handler, RunInfo, RunType};
 
 /// Span 状态
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,4 +1,4 @@
-use crate::channels::message::{ChannelId, ChannelMessage, PeerInfo, PeerKind};
+use crate::channels::message::{ChannelMessage, PeerInfo, PeerKind};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -23,7 +23,7 @@ use crate::adk::agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentOutput, AgentResult, ResumeInfo,
 };
 use crate::components::model::BaseChatModel;
-use crate::schema::{Content, Message, RoleType, ToolCall, ToolInfo};
+use crate::schema::{Content, Message, ToolInfo};
 
 const HYBRID_PROMPT_TEMPLATE: &str = include_str!("hybrid_system.md");
 

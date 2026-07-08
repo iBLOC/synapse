@@ -1,5 +1,5 @@
-use crate::components::embedding::{Embedding, EmbeddingError, EmbeddingResult};
-use crate::components::indexer::{IndexOptions, Indexer, IndexerError, IndexerResult};
+use crate::components::embedding::Embedding;
+use crate::components::indexer::{Indexer, IndexerError, IndexerResult};
 use crate::components::retriever::{
     Document, RetrieveOptions, Retriever, RetrieverError, RetrieverResult,
 };

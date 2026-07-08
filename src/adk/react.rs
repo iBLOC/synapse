@@ -1,7 +1,7 @@
 use crate::adk::agent::{Agent, AgentError, AgentEvent, AgentInput, AgentOutput, AgentStream, AgentStreamEvent};
-use crate::components::model::{BaseChatModel, FinishReason, GenerateOptions, MessageDelta};
+use crate::components::model::{BaseChatModel, FinishReason, GenerateOptions};
 use crate::components::tool::{BaseTool, EnhancedInvokableTool, InvokableTool, ToolError};
-use crate::schema::{Content, Message, RoleType, ToolArgument, ToolCall, ToolInfo, ToolResult};
+use crate::schema::{Content, Message, RoleType, ToolCall, ToolInfo, ToolResult};
 use crate::skills::{SkillContext, SkillError, SkillManager};
 use async_trait::async_trait;
 use futures::StreamExt;

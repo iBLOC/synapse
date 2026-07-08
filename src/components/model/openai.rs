@@ -548,10 +548,9 @@ impl BaseChatModel for OpenAIModel {
         messages: Vec<Message>,
         options: GenerateOptions,
     ) -> Result<crate::stream::StreamReader<MessageDelta>, ModelError> {
-        use crate::components::model::delta::{FinishReason, MessageDelta, ToolCallDelta};
+        use crate::components::model::delta::{FinishReason, MessageDelta};
         use crate::transport::sse::parse_chunk;
         use serde_json::Value;
-        use tokio::sync::mpsc;
 
         let model_name = options
             .model

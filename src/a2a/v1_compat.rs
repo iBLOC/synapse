@@ -17,7 +17,7 @@ use async_trait::async_trait;
 
 use crate::a2a::card::AgentCard;
 use crate::a2a::protocol::{
-    FilePart, Message, MessagePart, MessageRole, Task, TaskState, TaskStatus,
+    Message, MessagePart, MessageRole, Task, TaskState, TaskStatus,
 };
 
 #[deprecated(

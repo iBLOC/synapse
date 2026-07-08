@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 
-use crate::adk::agent::{Agent, AgentError, AgentEvent, AgentInput, AgentResult, ResumeInfo};
+use crate::adk::agent::{Agent, AgentEvent, AgentInput, AgentResult, ResumeInfo};
 use crate::adk::multiagent::agent_tool::AgentTool;
 use crate::adk::react::ChatModelAgent;
 use crate::components::model::BaseChatModel;

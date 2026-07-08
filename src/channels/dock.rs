@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::plugin::{ChannelCapabilities, ChannelMeta, ChannelStatus, ChannelStatus as _};
+use super::plugin::{ChannelCapabilities, ChannelMeta};
 use std::any::Any;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
