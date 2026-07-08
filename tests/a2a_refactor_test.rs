@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use synapse::llm::create_default_http_client;
 use synapse::protocol::{
     A2AAdapter, AgentAdapter, AgentEndpoint, AgentProtocol, AgentRequest, ProtocolMessage,

@@ -5,7 +5,7 @@ use synapse::adk::agent::react::GraphReActAgent;
 use synapse::adk::agent::{Agent, AgentInput};
 use synapse::components::model::{BaseChatModel, GenerateOptions, ModelError, ModelResult};
 use synapse::components::tool::{BaseTool, InvokableTool, ToolError};
-use synapse::compose::tool_node::{ToolsNode, ToolsNodeConfig};
+use synapse::compose::tool_node::ToolsNode;
 use synapse::schema::{Content, Message, RoleType, ToolInfo};
 
 struct MockChatModel {

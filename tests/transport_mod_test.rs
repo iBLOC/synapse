@@ -1,4 +1,4 @@
-use synapse::transport::{HttpError, HttpMethod, HttpRequest, HttpResponse};
+use synapse::transport::{HttpError, HttpMethod, HttpRequest};
 
 #[test]
 fn test_http_request_builder() {

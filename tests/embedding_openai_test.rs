@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use synapse::components::embedding::openai::OpenAIEmbedding;
 use synapse::components::embedding::Embedding;
 use synapse::llm::create_default_http_client;

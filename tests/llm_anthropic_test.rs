@@ -1,5 +1,4 @@
-use std::sync::Arc;
-use synapse::components::model::{BaseChatModel, GenerateOptions};
+use synapse::components::model::BaseChatModel;
 use synapse::llm::{create_default_http_client, AnthropicClient};
 use synapse::schema::{Content, Message, RoleType};
 
@@ -24,7 +23,7 @@ async fn test_anthropic_client_with_model() {
 
 #[tokio::test]
 async fn test_anthropic_generate_with_mock_server() {
-    use mockito::Server;
+    
     use synapse::components::model::GenerateOptions;
 
     let mut server = mockito::Server::new_async().await;
@@ -74,7 +73,7 @@ async fn test_anthropic_generate_with_mock_server() {
 
 #[tokio::test]
 async fn test_anthropic_generate_with_system_message() {
-    use mockito::Server;
+    
     use synapse::components::model::GenerateOptions;
 
     let mut server = mockito::Server::new_async().await;
@@ -124,7 +123,7 @@ async fn test_anthropic_generate_with_system_message() {
 
 #[tokio::test]
 async fn test_anthropic_generate_error_handling() {
-    use mockito::Server;
+    
     use synapse::components::model::GenerateOptions;
 
     let mut server = mockito::Server::new_async().await;
