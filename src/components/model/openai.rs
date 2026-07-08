@@ -270,20 +270,25 @@ struct OpenAIRequest {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIResponse {
+    #[allow(dead_code)]
     id: String,
+    #[allow(dead_code)]
     model: String,
     choices: Vec<OpenAIChoice>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIChoice {
+    #[allow(dead_code)]
     index: usize,
     message: OpenAIMessage,
+    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct OpenAIMessage {
+    #[allow(dead_code)]
     role: Option<String>,
     content: Option<String>,
     tool_calls: Option<Vec<OpenAIToolCall>>,
@@ -305,15 +310,19 @@ struct OpenAIFunction {
 
 #[derive(Debug, Deserialize)]
 struct OpenAIDeltaResponse {
+    #[allow(dead_code)]
     id: String,
+    #[allow(dead_code)]
     model: String,
     choices: Vec<OpenAIDeltaChoice>,
 }
 
 #[derive(Debug, Deserialize)]
 struct OpenAIDeltaChoice {
+    #[allow(dead_code)]
     index: usize,
     delta: OpenAIMessage,
+    #[allow(dead_code)]
     finish_reason: Option<String>,
 }
 
