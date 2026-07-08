@@ -1,5 +1,5 @@
 use crate::components::model::{BaseChatModel, GenerateOptions, ModelError, ModelResult};
-use crate::components::model::{StreamReader, StreamWriter};
+use crate::components::model::StreamReader;
 use crate::schema::Message;
 use crate::transport::HttpClient;
 use crate::transport::HttpClientSse;

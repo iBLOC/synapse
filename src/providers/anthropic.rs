@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use futures::stream::Stream;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 use super::{ChatOptions, Content, LLMError, LLMProvider, LLMResult, Message};

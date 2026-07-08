@@ -1,5 +1,4 @@
 use super::{Context, Runnable, RunnableError, RunnableFuture, RunnableResult};
-use std::pin::Pin;
 use std::sync::Arc;
 
 pub struct Lambda {

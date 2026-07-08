@@ -1,7 +1,6 @@
 //! LCEL 风格的链式表达式语法
 
-use super::typed_lambda::TypedLambda;
-use super::{Context, Runnable, RunnableError, RunnableFuture, RunnableResult};
+use super::{Context, Runnable, RunnableError, RunnableFuture};
 use std::sync::Arc;
 
 /// JSON 输入输出 Pipe - 使用 Arc 实现，内部存储可共享引用

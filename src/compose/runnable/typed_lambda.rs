@@ -1,6 +1,7 @@
 //! 强类型 Lambda 组合（Eino 风格）
 
 use super::{Context, Runnable, RunnableError, RunnableFuture, RunnableResult};
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 pub struct TypedLambda<I, O> {

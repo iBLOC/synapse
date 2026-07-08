@@ -7,7 +7,7 @@ pub mod workflow;
 mod tests;
 
 use crate::runnable::{
-    Context, Runnable, RunnableError, RunnableFuture, RunnableResult, StreamReader,
+    Context, Runnable, RunnableError, RunnableResult,
 };
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

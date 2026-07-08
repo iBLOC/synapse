@@ -1,12 +1,11 @@
-use std::future::Future;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use crate::components::document::DocumentResult;
 use crate::components::retriever::Document;
 
 use super::DocumentTransformer;
+use async_trait::async_trait;
 
 pub struct TokenTextSplitter {
     chunk_size: usize,

@@ -1,7 +1,6 @@
 use super::super::runnable::{invokable_lambda, Context, Runnable, RunnableError, RunnableResult};
 use super::options::NodeTriggerMode;
 use super::{CompiledGraph, Graph, END, START};
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 pub struct Chain<I> {

@@ -3,7 +3,6 @@ use crate::components::indexer::{Indexer, IndexerError, IndexerResult};
 use crate::components::retriever::{
     Document, RetrieveOptions, Retriever, RetrieverError, RetrieverResult,
 };
-use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

@@ -1,8 +1,7 @@
-use crate::components::tool::{BaseTool, InvokableTool, ToolError};
-use crate::compose::runnable::stream::channel;
-use crate::compose::runnable::{Context, Runnable, RunnableError, RunnableFuture, RunnableResult};
+use crate::components::tool::{BaseTool, InvokableTool};
+use crate::compose::runnable::{Context, Runnable, RunnableError, RunnableFuture};
 use crate::compose::StreamReader;
-use crate::schema::{FunctionCall, Message, RoleType, ToolCall, ToolInfo, ToolResult};
+use crate::schema::{Message, RoleType, ToolInfo, ToolResult};
 use std::collections::HashMap;
 use std::sync::Arc;
 
