@@ -1,3 +1,24 @@
+//! Synapse: shared foundation library for the Shadow platform.
+//!
+//! ## Glob re-exports
+//!
+//! This crate re-exports many modules' public items at the top level
+//! for convenience (`synapse::Agent` instead of
+//! `synapse::adk::agent::Agent`). Several module boundaries share
+//! common type names (`Message`, `Content`, `TaskStatus`, `MessageDelta`,
+//! `MessageDeltaChoice`, etc.) across a2a / adk / agent / components /
+//! protocol / scheduler / etc. The `pub use mod::*` re-exports
+//! therefore produce a "ambiguous glob re-exports" diagnostic at every
+//! pub use site. The conflict is not a soundness bug: every name is
+//! still reachable via its fully-qualified path (`synapse::a2a::Message`,
+//! `synapse::adk::Message`, `synapse::protocol::adapter::TaskStatus`,
+//! etc.); the warning only flags that the *glob* form is ambiguous.
+//! Downstream consumers should prefer the fully-qualified form
+//! for types that collide across modules; the preludes (`adk::prelude`,
+//! `a2a::prelude`) re-export the most-used names per-module.
+
+#![allow(ambiguous_glob_reexports)]
+
 pub mod a2a;
 pub mod adk;
 pub mod agent;
