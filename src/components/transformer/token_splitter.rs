@@ -69,7 +69,7 @@ fn split_by_tokens(text: &str, chunk_size: usize, chunk_overlap: usize) -> Vec<S
     let total_words = words.len();
 
     while start < total_words {
-        let mut end = (start + chunk_size).min(total_words);
+        let end = (start + chunk_size).min(total_words);
         let chunk: String = words[start..end].join(" ");
         chunks.push(chunk);
 

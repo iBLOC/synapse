@@ -47,7 +47,7 @@ impl Session {
         self
     }
 
-    pub fn with_max_iterations(mut self, max: usize) -> Self {
+    pub fn with_max_iterations(self, max: usize) -> Self {
         *self.remaining_iterations.write() = max;
         self
     }
