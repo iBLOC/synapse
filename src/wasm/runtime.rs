@@ -151,7 +151,27 @@ impl WasmRuntime {
             .call(&mut *store, (ptr as i32, input_bytes.len() as i32))
             .map_err(|e| format!("WASM execution failed: {}", e))?;
 
-        Ok(format!("[wasm:{}] result={} input_len={}", entry, result, input_bytes.len()))
+        if result < 0 {
+            return Err(format!(
+                "wasm agent returned error code: {} (entry='{}', input_len={})",
+                result, entry, input_bytes.len()
+            ));
+        }
+
+        let resp_len = result as usize;
+        let mem_size = mem.data_size(&store);
+        if resp_len > mem_size {
+            return Err(format!(
+                "wasm agent claims resp_len={} but memory only has {} bytes",
+                resp_len, mem_size
+            ));
+        }
+
+        let mut response_bytes = vec![0u8; resp_len];
+        mem.read(&mut *store, ptr, &mut response_bytes)
+            .map_err(|e| format!("failed to read wasm response: {e}"))?;
+
+        String::from_utf8(response_bytes).map_err(|e| format!("wasm response not utf8: {e}"))
     }
 }
 
@@ -213,8 +233,8 @@ mod tests {
         let wat = r#"
             (module
                 (memory (export "memory") 1)
-                (func (export "run") (param i32 i32) (result i32)
-                    i32.const 42
+                (func (export "run") (param $p i32) (param $l i32) (result i32)
+                    local.get $l
                 )
             )
         "#;
@@ -222,9 +242,9 @@ mod tests {
 
         let runtime = WasmRuntime::new();
         let module = runtime.load_module_from_file(&wasm_path).unwrap();
-        let result = runtime.execute(&module, "run", "input").unwrap();
-        assert!(result.output.contains("wasm:run"));
-        assert!(result.output.contains("42"));
+        let result = runtime.execute(&module, "run", "hello-from-disk").unwrap();
+        assert_eq!(result.output, "hello-from-disk");
+        assert!(result.duration_ms < 1000);
 
         std::fs::remove_dir_all(&dir).ok();
     }
@@ -235,8 +255,8 @@ mod tests {
         let wat = r#"
             (module
                 (memory (export "memory") 1)
-                (func (export "handle") (param i32 i32) (result i32)
-                    local.get 0
+                (func (export "handle") (param $p i32) (param $l i32) (result i32)
+                    local.get $l
                 )
             )
         "#;
@@ -251,7 +271,31 @@ mod tests {
 
         let pkg = WasmPackage::new(meta, bytes);
         let result = runtime.execute_package(&pkg, "hello").unwrap();
-        assert!(result.output.contains("wasm:handle"));
+        assert_eq!(result.output, "hello", "echo via same-offset read");
+    }
+
+    #[test]
+    fn test_execute_package_agent_can_write_offset_zero() {
+        let runtime = WasmRuntime::new();
+        let wat = r#"
+            (module
+                (memory (export "memory") 1)
+                (func (export "handle") (param $p i32) (param $l i32) (result i32)
+                    (memory.copy (i32.const 0) (local.get $p) (local.get $l))
+                    (local.get $l)
+                )
+            )
+        "#;
+        let bytes = wat::parse_str(wat).unwrap();
+        let meta = PackageMetadata::new(
+            PackageId::new("test-pkg"),
+            PackageVersion::new(1, 0, 0),
+            "Test",
+        )
+        .with_entry("handle");
+        let pkg = WasmPackage::new(meta, bytes);
+        let result = runtime.execute_package(&pkg, "echo-from-zero").unwrap();
+        assert_eq!(result.output, "echo-from-zero");
     }
 
     #[test]

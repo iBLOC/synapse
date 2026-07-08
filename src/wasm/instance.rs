@@ -234,8 +234,8 @@ mod tests {
         let wat = r#"
             (module
                 (memory (export "memory") 1)
-                (func (export "process") (param i32 i32) (result i32)
-                    local.get 0
+                (func (export "process") (param $p i32) (param $l i32) (result i32)
+                    local.get $l
                 )
             )
         "#;
@@ -341,7 +341,7 @@ mod tests {
         manager.start(&instance.id, &pkg).unwrap();
 
         let result = manager.invoke(&instance.id, &pkg, "hello").unwrap();
-        assert!(result.output.contains("wasm:process"));
+        assert_eq!(result.output, "hello");
 
         let updated = manager.get(&instance.id).unwrap();
         assert_eq!(updated.invocation_count, 1);
