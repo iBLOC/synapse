@@ -33,7 +33,6 @@ pub struct TaskResult {
 pub struct WeightedScheduler {
     graph: Arc<ThoughtGraph>,
     history: Arc<RwLock<Vec<SchedulingRecord>>>,
-    chains: Arc<RwLock<HashMap<String, Vec<ThoughtChain>>>>,
 }
 
 impl WeightedScheduler {
@@ -41,7 +40,6 @@ impl WeightedScheduler {
         Self {
             graph,
             history: Arc::new(RwLock::new(Vec::new())),
-            chains: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 

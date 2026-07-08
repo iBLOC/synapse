@@ -77,17 +77,6 @@ fn wrap_invokable_tool<T: InvokableTool + 'static>(tool: Arc<T>) -> InvokableEnd
     })
 }
 
-fn invokable_to_streamable(ep: InvokableEndpoint) -> StreamEndpoint {
-    Arc::new(move |input: ToolInput| {
-        let output = ep(input)?;
-        let (mut tx, rx) = channel::<String>(1);
-        tokio::spawn(async move {
-            let _ = tx.send(Ok(output.result)).await;
-        });
-        Ok(StreamToolOutput { result: rx })
-    })
-}
-
 fn conv_tools<T: BaseTool + InvokableTool + 'static>(
     tools: &[Arc<T>],
 ) -> Result<ToolsTuple, ToolsNodeError> {

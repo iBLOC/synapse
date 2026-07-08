@@ -125,7 +125,6 @@ impl<I, O> Graph<I, O> {
                     None
                 })
             },
-            std::iter::once(to.to_string()).collect(),
         );
         self.add_branch(from, branch);
         self
@@ -431,11 +430,10 @@ async fn execute_node(
 pub struct GraphBranch {
     condition:
         Arc<dyn Fn(&Context, &serde_json::Value) -> RunnableResult<Option<String>> + Send + Sync>,
-    end_nodes: HashSet<String>,
 }
 
 impl GraphBranch {
-    pub fn new<C>(condition: C, end_nodes: HashSet<String>) -> Self
+    pub fn new<C>(condition: C) -> Self
     where
         C: Fn(&Context, &serde_json::Value) -> RunnableResult<Option<String>>
             + Send
@@ -444,7 +442,6 @@ impl GraphBranch {
     {
         Self {
             condition: Arc::new(condition),
-            end_nodes,
         }
     }
 }
@@ -452,15 +449,6 @@ impl GraphBranch {
 struct SyncLambda<F> {
     name: String,
     f: Arc<F>,
-}
-
-impl<F> SyncLambda<F>
-where
-    F: Fn(serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static,
-{
-    fn invoke_sync(&self, input: serde_json::Value) -> RunnableResult<serde_json::Value> {
-        (self.f)(input).map_err(|e| RunnableError::Invoke(e))
-    }
 }
 
 impl<F> Runnable<serde_json::Value, serde_json::Value> for SyncLambda<F>
