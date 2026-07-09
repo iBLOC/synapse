@@ -1,4 +1,4 @@
-use super::package::{PackageId, PackageVersion, WasmPackage};
+use super::package::WasmPackage;
 use std::path::Path;
 use wasmtime::{Config, Engine, Memory, MemoryType, Module, Store};
 
@@ -184,7 +184,7 @@ impl Default for WasmRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::wasm::PackageMetadata;
+    use crate::wasm::package::{PackageId, PackageVersion, PackageMetadata};
 
     #[test]
     fn test_runtime_creation() {

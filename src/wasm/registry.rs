@@ -1,4 +1,4 @@
-use super::package::{PackageId, PackageMetadata, PackageVersion, WasmPackage};
+use super::package::{PackageId, PackageVersion, WasmPackage};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -62,7 +62,8 @@ impl PackageRegistry {
     }
 
     pub fn init(&self) -> RegistryResult<()> {
-        if let Some(ref dir) = self.registry_dir {
+        let dir = self.registry_dir.as_ref().expect("registry_dir not set");
+        if dir.exists() {
             std::fs::create_dir_all(dir)
                 .map_err(|e| RegistryError::Io(format!("Failed to create dir: {}", e)))?;
 
@@ -100,7 +101,7 @@ impl PackageRegistry {
             }
         }
 
-        if let Some(ref dir) = self.registry_dir {
+        if let Some(_) = &self.registry_dir {
             let path = self.package_path(&id, &version);
             std::fs::create_dir_all(path.parent().unwrap())
                 .map_err(|e| RegistryError::Io(e.to_string()))?;
@@ -186,7 +187,7 @@ impl PackageRegistry {
             RegistryError::VersionNotFound(id.to_string(), version.to_string())
         })?;
 
-        if let Some(ref dir) = self.registry_dir {
+        if let Some(_) = &self.registry_dir {
             let path = self.package_path(id, version);
             let _ = std::fs::remove_file(&path);
         }
@@ -200,7 +201,7 @@ impl PackageRegistry {
             .remove(id)
             .ok_or_else(|| RegistryError::PackageNotFound(id.to_string()))?;
 
-        if let Some(ref dir) = self.registry_dir {
+        if let Some(_) = &self.registry_dir {
             for version in versions.keys() {
                 let path = self.package_path(id, version);
                 let _ = std::fs::remove_file(&path);
@@ -249,6 +250,7 @@ impl Default for PackageRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::wasm::PackageMetadata;
 
     fn make_package(id: &str, version: &str) -> WasmPackage {
         let meta = PackageMetadata::new(

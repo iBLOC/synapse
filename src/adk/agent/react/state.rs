@@ -180,6 +180,7 @@ mod tests {
         };
 
         let result = tools_node_pre_handler(&ctx, &message, &mut state).unwrap();
+        let _ = result;
         assert!(state.return_directly_tool_call_id.is_some());
         assert_eq!(
             state.return_directly_tool_call_id.as_ref().unwrap(),

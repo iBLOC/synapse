@@ -230,7 +230,7 @@ mod tests {
     use super::*;
     use crate::wasm::PackageMetadata;
 
-    fn make_package(id: &str, version: &str) -> WasmPackage {
+    fn make_package(id: &str, _version: &str) -> WasmPackage {
         let wat = r#"
             (module
                 (memory (export "memory") 1)

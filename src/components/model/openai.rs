@@ -258,6 +258,7 @@ impl BaseChatModel for OpenAIChatModel {
 }
 
 #[derive(Debug, Serialize)]
+#[allow(dead_code)]
 struct OpenAIRequest {
     model: String,
     messages: Vec<serde_json::Value>,
@@ -377,7 +378,7 @@ impl Default for OpenAIChatModelBuilder {
     }
 }
 
-use crate::transport::{HttpClient, HttpClientSse};
+use crate::transport::HttpClientSse;
 use std::sync::Arc;
 
 pub struct OpenAIModel {

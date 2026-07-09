@@ -1,10 +1,9 @@
 use crate::adk::agent::{Agent, AgentError, AgentEvent, AgentInput, AgentOutput, AgentStream, AgentStreamEvent};
 use crate::components::model::{BaseChatModel, FinishReason, GenerateOptions};
-use crate::components::tool::{BaseTool, EnhancedInvokableTool, InvokableTool, ToolError};
+use crate::components::tool::{EnhancedInvokableTool, InvokableTool, ToolError};
 use crate::schema::{Content, Message, RoleType, ToolCall, ToolInfo, ToolResult};
 use crate::skills::{SkillContext, SkillError, SkillManager};
 use async_trait::async_trait;
-use futures::StreamExt;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -674,9 +673,8 @@ mod tests {
         BaseChatModel, FinishReason, GenerateOptions, MessageDelta, ModelError, ModelResult,
         StreamReader,
     };
-    use crate::schema::{Content, Message, RoleType};
+    use crate::schema::{Content, Message};
     use async_trait::async_trait;
-    use std::sync::Mutex;
 
     /// In-memory mock that satisfies [`BaseChatModel`].
     ///
@@ -696,6 +694,7 @@ mod tests {
             }
         }
 
+        #[allow(dead_code)]
         fn looping(deltas: Vec<MessageDelta>) -> Self {
             Self {
                 deltas,
@@ -764,6 +763,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     fn tool_call_delta(name: &str, args: &str) -> MessageDelta {
         use crate::components::model::ToolCallDelta;
         MessageDelta {
@@ -802,7 +802,7 @@ mod tests {
         let mut final_seen = false;
         while let Some(event) = stream.next().await {
             match event {
-                AgentStreamEvent::TokenDelta { agent, delta } => {
+                AgentStreamEvent::TokenDelta { agent, delta: _ } => {
                     assert_eq!(agent, "tester");
                     token_count += 1;
                 }

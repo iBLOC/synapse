@@ -99,15 +99,13 @@ impl<T: Handler + Send + Sync> TimingChecker for T {
 }
 
 pub trait Handler: Send + Sync {
-    fn on_start(&self, info: &RunInfo, input: &serde_json::Value) {}
-    fn on_end(&self, info: &RunInfo, output: &serde_json::Value) {}
-    fn on_error(&self, info: &RunInfo, error: &str) {}
-    fn on_start_with_stream_input(&self, info: &RunInfo, input: &serde_json::Value) {
-        self.on_start(info, input);
+    fn on_start(&self, _info: &RunInfo, _input: &serde_json::Value) {}
+    fn on_end(&self, _info: &RunInfo, _output: &serde_json::Value) {}
+    fn on_error(&self, _info: &RunInfo, _error: &str) {}
+    fn on_start_with_stream_input(&self, _info: &RunInfo, _input: &serde_json::Value) {
+        // see on_end_with_stream_output
     }
-    fn on_end_with_stream_output(&self, info: &RunInfo, output: &serde_json::Value) {
-        self.on_end(info, output);
-    }
+    fn on_end_with_stream_output(&self, _info: &RunInfo, _output: &serde_json::Value) {}
 }
 
 pub struct HandlerBuilder {

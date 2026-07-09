@@ -9,7 +9,7 @@ mod tests;
 use crate::runnable::{
     Context, Runnable, RunnableError, RunnableResult,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub const START: &str = "start";

@@ -256,7 +256,6 @@ struct OpenAIEmbedding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::providers::ContentPart;
 
     #[test]
     fn deserialize_tool_call_response() {

@@ -148,6 +148,7 @@ impl HypothesisTree {
             Some(p) => p,
             None => return Vec::new(),
         };
+        let _ = parent;
 
         let mut new_ids = Vec::new();
         let mut nodes = self.nodes.write();
@@ -444,6 +445,7 @@ mod tests {
         assert_eq!(tree.leaf_count(), 1);
 
         let children = tree.ideate(&tree.root_id, vec!["A".to_string(), "B".to_string()]);
+        let _ = children;
         assert_eq!(tree.leaf_count(), 2);
     }
 }

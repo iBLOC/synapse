@@ -1,7 +1,6 @@
 use super::graph::ThoughtGraph;
 use super::types::*;
 use parking_lot::RwLock;
-use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -199,8 +198,7 @@ for entry in self.graph.top_paths(&start, task.max_depth) {
 
     pub fn best_chain_for_pattern(&self, task_pattern: &str) -> Option<ThoughtChain> {
         let history = self.history.read();
-        
-        let pattern_lower = task_pattern.to_lowercase();
+        let _pattern_lower = task_pattern.to_lowercase();
         let successful: Vec<_> = history
             .iter()
             .filter(|r| r.success && r.path.len() >= 2)

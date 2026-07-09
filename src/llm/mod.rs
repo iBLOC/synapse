@@ -21,7 +21,7 @@
 //! # }
 //! ```
 
-use crate::transport::{DefaultHttpClient, HttpClient, HttpClientSse};
+use crate::transport::{DefaultHttpClient, HttpClientSse};
 use std::sync::Arc;
 
 pub mod anthropic;

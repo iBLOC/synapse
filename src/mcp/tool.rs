@@ -64,11 +64,13 @@ impl InvokableTool for McpToolAdapter {
 
         let mut out = String::new();
         for content in result.content {
-            if let crate::mcp::McpContent::Text(t) = content {
-                if !out.is_empty() {
-                    out.push('\n');
+            match content {
+                crate::mcp::McpContent::Text(ref t) => {
+                    if !out.is_empty() {
+                        out.push('\n');
+                    }
+                    out.push_str(&t.text);
                 }
-                out.push_str(&t.text);
             }
         }
         Ok(out)

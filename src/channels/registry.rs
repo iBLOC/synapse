@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::dock::ChannelDock;
-use super::plugin::{ChannelPlugin, ChannelStatus, OutboundAdapter};
+use super::plugin::{ChannelPlugin, ChannelStatus};
 
 #[derive(Clone)]
 pub struct ChannelRegistry {

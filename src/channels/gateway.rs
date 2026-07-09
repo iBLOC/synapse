@@ -59,7 +59,6 @@ impl std::fmt::Debug for Gateway {
 mod tests {
     use super::*;
     use crate::channels::message::PeerInfo;
-    use crate::channels::plugin::ChannelError;
 
     #[tokio::test]
     async fn test_gateway_no_handler() {

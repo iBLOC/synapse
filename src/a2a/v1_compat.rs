@@ -150,7 +150,10 @@ pub trait TaskHandler: Send + Sync {
 
 #[deprecated(note = "use `a2a::server::A2AServerBuilder` instead")]
 pub struct A2AServer {
+    #[allow(dead_code)]
+    #[allow(dead_code)]
     card: AgentCard,
+    #[allow(dead_code)]
     task_handler: Box<dyn TaskHandler>,
 }
 

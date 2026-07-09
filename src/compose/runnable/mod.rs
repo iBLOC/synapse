@@ -23,7 +23,7 @@ where
     I: Send + 'static,
     O: Send + 'static,
 {
-    fn invoke(&self, ctx: Context, input: I) -> RunnableFuture<O> {
+    fn invoke(&self, _ctx: Context, _input: I) -> RunnableFuture<O> {
         Box::pin(async move {
             Err(RunnableError::NotImplemented(
                 "invoke not implemented".into(),
