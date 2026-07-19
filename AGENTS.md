@@ -1,7 +1,7 @@
 # Synapse — 神经突触层 (Shared Foundation Library)
 
-**Updated**: 2026-07-03
-**Status**: ✅ v0.4 lobe module complete
+**Updated**: 2026-07-19 (zero-warnings pass + A2A metadata wire-forwarding + WASM-A2A bridge sync path)
+**Status**: ✅ v0.4 lobe module complete + WASM-A2A sync bridge + A2A metadata round-trip via `__cortex_meta_v1__`
 
 ## Role
 
@@ -16,11 +16,13 @@ synapse/src/
 ├── agent/                  # Agent trait + orchestrator
 ├── callbacks/              # Event callbacks
 ├── channels/               # Channel plugins (dock, router)
+├── coding_tools/           # Code-shaped tool helpers (added 2026-07+)
 ├── components/             # Model, RAG, embedding, indexer
 ├── compose/                # Graph composition (chain, workflow)
 ├── llm/                    # LLM implementations (OpenAI, Anthropic)
-├── lobe/                   # NEW: Stateless skill lifecycle glue
+├── lobe/                   # Stateless skill lifecycle glue (v0.4)
 ├── mcp/                    # Model Context Protocol
+├── memory/                 # Memory helpers (added 2026-07+)
 ├── protocol/               # HybridRAG, Rerank, Retriever
 ├── providers/              # LLMProvider trait + implementations
 ├── scheduler/              # Task scheduling
@@ -28,11 +30,13 @@ synapse/src/
 ├── session/                # Session management
 ├── skills/                 # Skill definitions
 ├── stream/                 # Stream reader/writer
+├── structured/             # Structured output helpers (added 2026-07+)
 ├── task/                   # Task management
 ├── thought/                # Thought chains
+├── trace_context.rs        # Distributed tracing context (added 2026-07+)
 ├── transport/              # HTTP client
 ├── utils/                  # Utilities
-└── wasm/                   # WASM runtime (package, manager, registry)
+└── wasm/                   # WASM runtime (package, manager, registry) — call_entry reads N bytes from linear memory at offset `ptr` (closes WASM-A2A sync bridge)
 ```
 
 ## Build
@@ -83,6 +87,10 @@ The `synapse::lobe` module provides lifecycle glue for stateless skill executors
 
 | Hash | Description |
 |------|-------------|
+| 1728752 | chore: eliminate all remaining warnings (89 → 0) across the workspace |
+| 135f1fd | feat: forward cortex's packed `metadata['name']` through `into_a2a_message` via `__cortex_meta_v1__` prefix (decode via `decode_metadata_from_name`) — closes the v0.1 metadata propagation gap |
+| 9b19949 | docs: allow `ambiguous_glob_reexports` in lib.rs (cosmetic lint exemption, documented) |
+| WASM-A2A bridge | `call_entry` reads N bytes from linear memory at offset `ptr` (was returning placeholder); combined with cortex's `invoke` no longer discarding `_result`, real WASM agents with `handle(json) -> json` reach cortex end-to-end |
 | 754c5a8 | feat: add synapse::lobe module — v0.4 stateless skill lifecycle glue |
 | 207bef6 | docs: migrate project-level + family docs to /home/ibloc/Projects/docs/ |
 | c96f4f6 | docs: phase 4.5 status + prefrontal URL convention in shadow contract |
