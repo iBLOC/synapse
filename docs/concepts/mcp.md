@@ -5,16 +5,13 @@ title: MCP (Model Context Protocol)
 # MCP (Model Context Protocol)
 
 MCP is a standard protocol for connecting LLMs to tools and data sources.
-Synapse implements MCP client (stdio + HTTP transports).
+Synapse implements both MCP client and server.
 
 ## What is MCP?
 
 MCP defines a JSON-RPC based protocol where:
 - **Server** exposes tools, resources, prompts
 - **Client** invokes them, gets results
-
-Synapse plays the **client** role, calling MCP servers and exposing
-their tools to Synapse agents.
 
 ## Transports
 
@@ -25,10 +22,9 @@ their tools to Synapse agents.
 
 Both implement the same `initialize / list_tools / call_tool` API.
 
-## StdioMcpClient
+## MCP Client
 
-Spawns a subprocess and communicates via stdin/stdout using
-Content-Length framed JSON-RPC (LSP-style).
+### StdioMcpClient
 
 ```rust
 use synapse::mcp::StdioMcpClient;
@@ -39,9 +35,7 @@ let tools = client.list_tools().await?;
 let result = client.call_tool("echo", serde_json::json!({"text": "hi"})).await?;
 ```
 
-## HttpMcpClient
-
-Sends JSON-RPC over HTTP POST. Reuses the `HttpClient` trait.
+### HttpMcpClient
 
 ```rust
 use std::sync::Arc;
@@ -52,6 +46,52 @@ let http: Arc<dyn synapse::transport::HttpClient> = Arc::new(DefaultHttpClient::
 let mut client = HttpMcpClient::new("https://mcp.example.com", http);
 client.initialize().await?;
 let tools = client.list_tools().await?;
+```
+
+## MCP Server
+
+Synapse provides a trait-based MCP server abstraction:
+
+### McpServer Trait
+
+```rust
+use synapse::mcp::McpServer;
+
+#[async_trait]
+impl McpServer for MyServer {
+    fn name(&self) -> &str { "my-server" }
+    fn version(&self) -> &str { "1.0" }
+
+    async fn list_tools(&self) -> McpResult<Vec<McpTool>> { ... }
+    async fn call_tool(&self, name: &str, args: Value) -> McpResult<McpCallToolResult> { ... }
+}
+```
+
+### SimpleMcpServer
+
+Build an MCP server with handler functions:
+
+```rust
+use synapse::mcp::{SimpleMcpServer, ToolHandler};
+
+struct EchoHandler;
+
+#[async_trait]
+impl ToolHandler for EchoHandler {
+    async fn execute(&self, args: Value) -> McpResult<McpCallToolResult> {
+        let text = args["input"].as_str().unwrap_or("");
+        Ok(McpCallToolResult {
+            content: vec![McpContent::Text(McpTextContent { text: text.to_string() })],
+            is_error: false,
+        })
+    }
+}
+
+let server = SimpleMcpServer::new("echo-server", "1.0")
+    .with_tool("echo", "Echoes input back", None, EchoHandler);
+
+let tools = server.list_tools().await?;
+let result = server.call_tool("echo", serde_json::json!({"input": "hello"})).await?;
 ```
 
 ## Using MCP Tools in Synapse Agents

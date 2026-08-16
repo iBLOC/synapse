@@ -17,13 +17,21 @@ hero:
 
 features:
   - title: 🚀 Production-Ready Core
-    details: Runnable, Graph, Chain, ReAct Agent. 205 tests passing. Apache 2.0.
+    details: Runnable, Graph, Chain, ReAct Agent. 279 tests passing. Apache 2.0.
   - title: 🤖 4 MultiAgent Patterns
     details: Router, Orchestrator, Handoff, Hybrid. Nested composition. LLM-driven and rule-based.
   - title: 📚 RAG Out of the Box
     details: 4 chunkers (Character/Recursive/Markdown/Token), OpenAI embedding, in-memory vector store.
   - title: 🔌 MCP + A2A
-    details: Model Context Protocol (stdio + HTTP). Agent-to-Agent protocol. Cross-process.
+    details: Model Context Protocol (stdio + HTTP + Server). Agent-to-Agent protocol. Cross-process.
+  - title: 📝 Session Event Log
+    details: Append-only event persistence. FileEventStore with JSON Lines format.
+  - title: 🌊 Waterfall Events
+    details: 5 dispatch modes (emit/parallel/serial/bail/waterfall). Interceptor pattern.
+  - title: 🔄 LLM Retry Policy
+    details: Exponential backoff with jitter. Configurable retryable error codes.
+  - title: 🏷️ Tool Namespace
+    details: Scoped skill registration. MCP-style qualified names (mcp__server__tool).
   - title: 🌐 WASM Sandbox Ready
     details: Cross-platform HttpClient. Run agents in wasi sandboxes (PFC runtime).
   - title: 🛡️ Type-Safe Rust
@@ -46,11 +54,12 @@ features:
 
 **Synapse's unique strengths:**
 
-- **A2A protocol** — First-class cross-process agent communication
+- **A2A protocol** — First-class cross-process agent communication with persistent task storage
 - **WASM isolation** — Run agents in `wasi` sandboxes (PFC runtime)
 - **MultiAgent 4-mode coverage** — Router, Orchestrator, Handoff, Hybrid
+- **MCP Server** — Build custom MCP servers with `SimpleMcpServer`
 - **Type-safe Rust API** — No Python runtime overhead, async-native
-- **205 tests** — Comprehensive unit + integration coverage, all mocked
+- **229 tests** — Comprehensive unit + integration coverage, all mocked
 
 ## Where to Go Next
 

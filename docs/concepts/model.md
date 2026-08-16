@@ -1,102 +1,133 @@
 ---
-title: Model
+title: Model Providers
 ---
 
-# Model
+# Model Providers
 
-`BaseChatModel` is the abstraction over LLM providers.
+Synapse provides a unified interface for LLM providers via the `LLMProvider` trait.
 
-## Trait Definition
+## LLMProvider Trait
 
 ```rust
 #[async_trait]
-pub trait BaseChatModel: Send + Sync {
-    async fn generate(
-        &self,
-        input: Vec<Message>,
-        options: GenerateOptions,
-    ) -> ModelResult<Message>;
+pub trait LLMProvider: Send + Sync {
+    fn provider_name(&self) -> &str;
+    fn model(&self) -> &str;
 
-    async fn stream(
-        &self,
-        input: Vec<Message>,
-        options: GenerateOptions,
-    ) -> ModelResult<StreamReader>;
+    async fn chat(&self, messages: Vec<Message>, options: ChatOptions) -> LLMResult<Message>;
+    async fn stream_chat(&self, messages: Vec<Message>, options: ChatOptions) -> LLMResult<LLMStream>;
+    async fn embeddings(&self, texts: Vec<String>) -> LLMResult<Vec<Vec<f32>>>;
 }
 ```
 
-## Built-in Implementations
+## Built-in Providers
 
-| Model | Notes |
-|-------|-------|
-| `OpenAIModel` | OpenAI API (GPT-4, GPT-3.5) |
-| `OpenAIChatModel` | Lower-level OpenAI interface |
-| `AnthropicClient` | Anthropic API (Claude) |
-| `OpenAIEmbedding` | For embeddings (used in RAG) |
+| Provider | Class | Env Var |
+|----------|-------|---------|
+| OpenAI | `OpenAIProvider` | `OPENAI_API_KEY` |
+| Anthropic | `AnthropicProvider` | `ANTHROPIC_API_KEY` |
+| Azure OpenAI | `AzureProvider` | `AZURE_OPENAI_API_KEY` |
 
-All built-in models use the cross-platform `HttpClient` trait.
-
-## GenerateOptions
+## Quick Start
 
 ```rust
-pub struct GenerateOptions {
-    pub model: Option<String>,
-    pub temperature: Option<f32>,
-    pub max_tokens: Option<u32>,
-    pub top_p: Option<f32>,
-    pub tools: Option<Vec<ToolInfo>>,
-    pub tool_choice: Option<ToolChoice>,
-}
+use synapse::providers::openai::OpenAIProvider;
+use synapse::providers::{ChatOptions, LLMProvider, Message, Role};
 
-pub enum ToolChoice {
-    Auto,
-    None,
-    Function { name: String },
-}
+let provider = OpenAIProvider::new("sk-...".to_string());
+
+let messages = vec![
+    Message { role: Role::System, content: Content::text("You are helpful.") },
+    Message { role: Role::User, content: Content::text("Hello!") },
+];
+
+let response = provider.chat(messages, ChatOptions::default()).await?;
+println!("{}", response.content.text.unwrap_or_default());
 ```
 
-## Example: OpenAI
+## ProviderRegistry
+
+Manage multiple providers with a central registry:
 
 ```rust
-use std::sync::Arc;
-use synapse::components::model::OpenAIModel;
+use synapse::providers::ProviderRegistry;
 
-let model = Arc::new(OpenAIModel::new("gpt-4", "sk-..."));
+// From environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY)
+let registry = ProviderRegistry::from_env()?;
+
+// Get default provider
+let provider = registry.get_default().unwrap();
+let response = provider.chat(messages, options).await?;
+
+// Get specific provider
+let anthropic = registry.get("anthropic").unwrap();
 ```
 
-## Example: Anthropic
+### From Configuration
 
 ```rust
-use std::sync::Arc;
-use synapse::llm::anthropic::AnthropicClient;
+use synapse::providers::{ProviderConfig, ProviderRegistry};
 
-let model = Arc::new(AnthropicClient::new("claude-3-5-sonnet-20241022", "sk-ant-..."));
+let configs = vec![
+    ProviderConfig {
+        provider: "openai".to_string(),
+        api_key_env: Some("OPENAI_API_KEY".to_string()),
+        base_url: None,
+        model: Some("gpt-4o".to_string()),
+    },
+    ProviderConfig {
+        provider: "anthropic".to_string,
+        api_key: Some("sk-ant-...".to_string()),
+        base_url: None,
+        model: Some("claude-3-5-sonnet-20241022".to_string()),
+    },
+];
+
+let registry = ProviderRegistry::from_config(configs)?;
 ```
 
-## Custom Model
+## Custom Provider
 
 ```rust
 use async_trait::async_trait;
-use synapse::components::model::{BaseChatModel, GenerateOptions, ModelError, ModelResult};
-use synapse::schema::Message;
+use synapse::providers::{ChatOptions, Content, LLMError, LLMProvider, LLMResult, Message};
 
 struct MyLocalModel;
 
 #[async_trait]
-impl BaseChatModel for MyLocalModel {
-    async fn generate(
-        &self,
-        _input: Vec<Message>,
-        _options: GenerateOptions,
-    ) -> ModelResult<Message> {
-        Ok(Message::assistant("Hello from local LLM"))
+impl LLMProvider for MyLocalModel {
+    fn provider_name(&self) -> &str { "local" }
+    fn model(&self) -> &str { "my-model" }
+
+    async fn chat(&self, messages: Vec<Message>, options: ChatOptions) -> LLMResult<Message> {
+        Ok(Message {
+            role: Role::Assistant,
+            content: Content::text("Hello from local model"),
+        })
     }
-    async fn stream(
-        &self,
-        _input: Vec<Message>,
-        _options: GenerateOptions,
-    ) -> ModelResult<synapse::components::model::StreamReader> {
-        Err(ModelError::Api("not implemented".into()))
+
+    async fn stream_chat(&self, _messages: Vec<Message>, _options: ChatOptions) -> LLMResult<LLMStream> {
+        Err(LLMError::StreamError("not implemented".into()))
+    }
+
+    async fn embeddings(&self, _texts: Vec<String>) -> LLMResult<Vec<Vec<f32>>> {
+        Err(LLMError::Api("not implemented".into()))
     }
 }
 ```
+
+## Configuration via Environment Variables
+
+| Variable | Provider | Description |
+|----------|----------|-------------|
+| `OPENAI_API_KEY` | OpenAI | API key |
+| `OPENAI_API_BASE` | OpenAI | Custom base URL (for Ollama, etc.) |
+| `OPENAI_MODEL` | OpenAI | Default model |
+| `ANTHROPIC_API_KEY` | Anthropic | API key |
+| `ANTHROPIC_BASE_URL` | Anthropic | Custom base URL |
+| `ANTHROPIC_MODEL` | Anthropic | Default model |
+
+## See Also
+
+- [Agent Trait](/reference/agent-trait) — Using providers in agents
+- [RAG Pipeline](/howto/rag-pipeline) — Using embeddings

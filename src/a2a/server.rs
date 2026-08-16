@@ -217,7 +217,6 @@ pub struct A2AServerBuilder {
 }
 
 impl A2AServerBuilder {
-    /// Create a new server builder for the given agent and card.
     pub fn new(agent: Arc<dyn Agent>, card: AgentCard) -> Self {
         Self {
             agent,
@@ -226,18 +225,22 @@ impl A2AServerBuilder {
         }
     }
 
-    /// Set the bind address for the server.
     pub fn bind(mut self, addr: std::net::SocketAddr) -> Self {
         self.bind_addr = Some(addr);
         self
     }
 
-    /// Build and serve the A2A server.
     pub async fn serve(self) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        self.serve_with_store(InMemoryTaskStore::new()).await
+    }
+
+    pub async fn serve_with_store<S: a2a_server::TaskStore>(
+        self,
+        task_store: S,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let bind_addr = self.bind_addr.unwrap_or_else(|| "0.0.0.0:8080".parse().unwrap());
 
         let executor = SynapseAgentExecutor::new(self.agent);
-        let task_store = InMemoryTaskStore::new();
         let handler = DefaultRequestHandler::new(executor, task_store);
 
         let handler = Arc::new(handler);

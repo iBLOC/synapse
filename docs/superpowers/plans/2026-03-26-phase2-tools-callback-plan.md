@@ -8,7 +8,7 @@
 - `components/tool/mod.rs`: BaseTool, InvokableTool, StreamableTool, EnhancedInvokableTool, EnhancedStreamableTool traits (骨架)
 - `callbacks/mod.rs`: CallbackHandler stub (on_start/on_end/on_error)
 - `providers/openai.rs`: LLM provider with chat() 实现
-- `adk/react.rs`: ChatModelAgent<ReAct> 半实现
+- `adk/react.rs`: `ChatModelAgent<ReAct>` 半实现
 
 ### Eino 有
 - 1051行 ToolsNode：完整工具调用处理、middleware chain、parallel execution、enhanced/stream variants

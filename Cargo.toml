@@ -57,6 +57,15 @@ wat = "1"
 # Hashing for package integrity
 sha2 = "0.10"
 
+# Encryption for config storage
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+hex = "0.4"
+
+# Hashing for 1Panel auth
+md5 = "0.7"
+
 # A2A protocol (official SDK)
 a2a-lf = "0.3"
 a2a-server-lf = "0.4"

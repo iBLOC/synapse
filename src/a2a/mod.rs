@@ -26,6 +26,9 @@ pub mod server;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod client;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod store;
+
 // v0.1 compat: the entire hand-rolled A2A stack was used by downstream
 // projects before v0.2. We re-export the v0.1 symbols here, marked
 // deprecated, so downstream code continues to compile without immediate

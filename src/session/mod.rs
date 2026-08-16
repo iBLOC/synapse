@@ -1,3 +1,11 @@
+pub mod event_types;
+pub mod event_store;
+pub mod file_store;
+
+pub use event_types::{SessionEvent, SessionEventType, SessionHeader};
+pub use event_store::{InMemoryEventStore, SessionError, SessionEventStore};
+pub use file_store::FileEventStore;
+
 use crate::schema::Message;
 use dashmap::DashMap;
 use parking_lot::RwLock;

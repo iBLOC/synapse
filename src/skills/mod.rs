@@ -1,3 +1,7 @@
+pub mod namespace;
+
+pub use namespace::{NamespaceError, ScopedSkillRouter};
+
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;

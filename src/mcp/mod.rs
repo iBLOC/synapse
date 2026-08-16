@@ -1,9 +1,11 @@
 pub mod http_client;
+pub mod server;
 pub mod stdio_client;
 pub mod tool;
 pub mod types;
 
 pub use http_client::HttpMcpClient;
+pub use server::{McpServer, SimpleMcpServer, ToolHandler};
 pub use stdio_client::StdioMcpClient;
 pub use tool::McpToolAdapter;
 pub use types::{

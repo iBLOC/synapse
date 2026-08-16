@@ -147,5 +147,13 @@ pub enum ResponseFormat {
 pub mod anthropic;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod azure;
+pub mod config;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod mimo;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod openai;
+pub mod registry;
+pub mod retry;
+
+pub use registry::{ProviderConfig, ProviderRegistry};
+pub use retry::{BackoffConfig, RetryMode, RetryPolicy};
