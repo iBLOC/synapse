@@ -13,7 +13,13 @@ pub struct OpenAIProvider {
 impl OpenAIProvider {
     pub fn new(api_key: String) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            // Bounded timeouts: an unreachable embedding/LLM endpoint must
+            // surface as an error instead of hanging callers for minutes.
+            client: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(5))
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
             api_key,
             base_url: "https://api.openai.com/v1".to_string(),
             default_model: "gpt-4o".to_string(),
@@ -35,6 +41,20 @@ impl OpenAIProvider {
             .map_err(|_| LLMError::Api("OPENAI_API_KEY not set".to_string()))?;
 
         Ok(Self::new(api_key))
+    }
+
+    /// 针对无 KEY 内部 endpoint 的便捷构造（如 neure-embed / cortex 的内置 LLM）。
+    /// API key 可为占位字符串，base_url 指向实际 OpenAI 兼容 endpoint。
+    pub fn for_endpoint(base_url: impl Into<String>, model: impl Into<String>) -> Self {
+        Self {
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(60))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
+            api_key: std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "no-key".into()),
+            base_url: base_url.into(),
+            default_model: model.into(),
+        }
     }
 }
 
