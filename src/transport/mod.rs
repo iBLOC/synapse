@@ -56,9 +56,13 @@ pub trait HttpClient: Send + Sync {
 pub mod native;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod sse;
+#[cfg(all(not(target_arch = "wasm32"), feature = "ziti"))]
+pub mod ziti;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub type DefaultHttpClient = native::ReqwestHttpClient;
+#[cfg(not(target_arch = "wasm32"))]
+pub use native::ReqwestHttpClient;
 
 #[cfg(target_arch = "wasm32")]
 pub mod wasi;
