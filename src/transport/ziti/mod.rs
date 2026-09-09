@@ -39,6 +39,62 @@
 // The entire module is wrapped in `#[cfg(feature = "ziti")]`. Opening
 // the feature pulls in `ziti-sdk` + hyper glue; without the feature
 // the module is absent from the build graph entirely.
+//
+// # SDK caveat — read this before depending on it
+//
+// **OpenZiti does not publish an official Rust SDK** at the time of
+// writing. The `openziti` GitHub org maintains official SDKs for
+// Go / C / Swift / Java / Python / C# but **not Rust**.
+//
+// This module currently wraps the **third-party `ziti-sdk` crate**
+// (`jaschadub/ziti-rust`, MIT, version 0.3.x). That crate is the
+// only Rust binding to OpenZiti currently published on crates.io
+// and it is community-maintained — not by the OpenZiti project.
+//
+// ## Mitigation strategy
+//
+// Callers are insulated from SDK churn by the [`ZitiGateway`] /
+// [`ZitiListener`] / [`ZitiStream`] API surface — switching to a
+// different Rust binding (or to OpenZiti's official C SDK via FFI)
+// only requires changes to `gateway.rs` and `listener.rs`. The
+// `serve()` / `serve_ziti_stream()` / `ZitiHttpClient` surface
+// stays stable.
+//
+// If/when the OpenZiti project ships an official Rust SDK, the
+// upgrade path is:
+//  1. Bump the `ziti-sdk` dep in this crate's `Cargo.toml`.
+//  2. Re-implement `gateway.rs` + `listener.rs` against the new
+//     SDK's identity / context / connection types.
+//  3. Re-export `ZitiStream` from the new SDK (or wrap it) so
+//     `ZitiHttpClient` and `serve_ziti_stream` keep working
+//     unchanged.
+//
+// ## Why we don't use the C SDK via FFI today
+//
+// The OpenZiti project does ship an official `ziti-sdk-c` with an
+// Apache-2.0 license. Switching to it via FFI was considered and
+// rejected for now:
+//  - C-FFI in async Rust adds unsafe-boundary complexity
+//    (lifetime management, manual Send/Sync impl, blocking-call
+//    → async adapter).
+//  - The third-party Rust SDK implements the same wire protocol
+//    against the same OpenZiti controllers, so wire compatibility
+//    is preserved.
+//  - The `ZitiGateway` abstraction means a future FFI rewrite is a
+//    local change, not an ecosystem-wide migration.
+//
+// ## Vendor strategy (recommended for production)
+//
+// Treat the upstream `jaschadub/ziti-rust` crate as **untrusted
+// third-party code** even though it's pinned in Cargo.lock:
+//  - Fork it under your org's GitHub namespace.
+//  - Vendor it via `[patch.crates-io]` in a workspace-level
+//    `Cargo.toml` so a vendored copy is always reachable.
+//  - Track upstream via GitHub watches; the wire protocol itself
+//    is stable per OpenZiti's documented spec, so a frozen vendor
+//    fork will continue to work against newer controllers as long
+//    as the protocol version is still supported.
+//
 
 #[cfg(feature = "ziti")]
 mod config;
