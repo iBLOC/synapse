@@ -16,6 +16,7 @@ pub use crate::providers::LLMProvider;
 pub mod stateless_skill;
 pub mod history;
 pub mod env_config;
+pub mod metrics;
 pub mod provider_set;
 pub mod service_registration;
 pub mod a2a_server;

@@ -92,6 +92,14 @@ impl AgentCard {
         }
     }
 
+    /// 占位 AgentCard — 当 Agent 还没填充描述/URL 时使用。
+    ///
+    /// 替代各 Agent 中反复出现的 `AgentCard::new(name, "", "", "0.1.0")` 模式。
+    /// 版本号使用 `"0.0.0"` 标识这是占位，应在 Agent 启动后填充实际元数据。
+    pub fn placeholder(name: impl Into<String>) -> Self {
+        Self::new(name, "", "", "0.0.0")
+    }
+
     pub fn provider(mut self, provider: Provider) -> Self {
         self.provider = Some(provider);
         self

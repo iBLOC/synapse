@@ -54,6 +54,45 @@ pub struct Message {
     pub content: Content,
 }
 
+impl Message {
+    pub fn user(text: impl Into<String>) -> Self {
+        Self {
+            role: Role::User,
+            content: Content::text(text),
+        }
+    }
+
+    pub fn assistant(text: impl Into<String>) -> Self {
+        Self {
+            role: Role::Assistant,
+            content: Content::text(text),
+        }
+    }
+
+    pub fn system(text: impl Into<String>) -> Self {
+        Self {
+            role: Role::System,
+            content: Content::text(text),
+        }
+    }
+
+    /// 提取 assistant 消息的纯文本（Content.text 或 parts 中的 Text 拼接）
+    pub fn text(&self) -> String {
+        if let Some(t) = &self.content.text {
+            return t.clone();
+        }
+        self.content
+            .parts
+            .iter()
+            .filter_map(|p| match p {
+                ContentPart::Text { text } => Some(text.clone()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
@@ -145,6 +184,7 @@ pub enum ResponseFormat {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod anthropic;
+pub mod audio;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod azure;
 pub mod config;
