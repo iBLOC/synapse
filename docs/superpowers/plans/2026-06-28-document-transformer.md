@@ -634,7 +634,7 @@ Expected: 99 baseline + 9 new = 108 tests
 - [ ] **Step 1: 检查 src/components/mod.rs 已包含 transformer**
 
 ```bash
-grep transformer /home/ibloc/Projects/synapse/src/components/mod.rs
+grep transformer https://github.com/iBLOC/synapse/src/components/mod.rs
 ```
 Expected: `pub mod transformer;` 存在
 
