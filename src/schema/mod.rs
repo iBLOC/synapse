@@ -159,11 +159,11 @@ impl Message {
                 .collect(),
         };
 
-        // cortex packs v0.1 metadata into the v0.2 'name' field with
-        // the prefix __cortex_meta_v1__ (see
+        // encephalon packs v0.1 metadata into the v0.2 'name' field with
+        // the prefix __encephalon_meta_v1__ (see
         // a2a::client::METADATA_NAME_PREFIX). a2a-lf's Message has
         // no 'name' field, but it does carry a metadata map, so we
-        // forward cortex's packed name under the metadata["name"]
+        // forward encephalon's packed name under the metadata["name"]
         // key. The reverse direction (from_a2a_message below) reads
         // the same key back into the v0.2 Message's name field.
         let metadata = self.name.as_ref().map(|n| {
@@ -219,7 +219,7 @@ impl Message {
             .collect::<Vec<_>>()
             .join("\n");
 
-        // Reverse of into_a2a_message: pull the cortex-packed name
+        // Reverse of into_a2a_message: pull the encephalon-packed name
         // back out of metadata["name"] (a2a-lf's Message has no
         // 'name' field, but it carries a metadata map that we
         // overloaded in into_a2a_message).

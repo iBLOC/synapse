@@ -3,11 +3,11 @@
 //! Inspired by Semantica's `DecisionRecorder` + `PolicyEngine` + `CausalChainAnalyzer`,
 //! but designed to be **storage-agnostic** and **lobe-friendly**:
 //!
-//! - **Lobe-agnostic** — any agent framework (cerebral-cortex, tiangong-agent,
+//! - **Lobe-agnostic** — any agent framework (encephalon, tiangong-agent,
 //!   paperclip-style orchestrators) can `ProviderSet::with_decisions(...)` and
 //!   wrap their `chat()` / `tool_use()` calls with `decision!(..) {}`.
 //! - **Storage-agnostic** — the default `HippocampusDecisionStore` persists
-//!   decisions as graph nodes (via the cortex `LanceGraphStorage` Cypher backend),
+//!   decisions as graph nodes (via the encephalon `LanceGraphStorage` Cypher backend),
 //!   but custom stores (Redis, Postgres, S3) can be plugged via
 //!   `DecisionStore` trait.
 //! - **Editable / auditable** — every record is a first-class `Decision` struct

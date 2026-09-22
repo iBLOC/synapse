@@ -1,6 +1,6 @@
 //! `DecisionStore` trait + `HippocampusDecisionStore` adapter + in-memory store.
 //!
-//! The trait surface is intentionally small. Every agent lobe (cerebral-cortex,
+//! The trait surface is intentionally small. Every agent lobe (encephalon,
 //! tiangong-agent, paperclip-style orchestrators) talks to `DecisionStore`
 //! via the same API; the storage choice is a deployment concern.
 
@@ -391,7 +391,7 @@ mod tests {
             .scenario("x")
             .reasoning("y")
             .outcome(outcome)
-            .made_by(DecisionMaker::CortexOrchestrator)
+            .made_by(DecisionMaker::EncephalonOrchestrator)
             .confidence(1.0)
             .build()
     }

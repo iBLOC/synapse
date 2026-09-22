@@ -13,7 +13,7 @@
 //! ```no_run
 //! use synapse::transport::ziti;
 //! # async fn run(router: axum::Router) -> anyhow::Result<()> {
-//! ziti::serve(router, "/etc/cortex/identity.json", "cortex").await?;
+//! ziti::serve(router, "/etc/encephalon/identity.json", "encephalon").await?;
 //! # Ok(()) }
 //! ```
 //!

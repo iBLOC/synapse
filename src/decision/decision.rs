@@ -56,7 +56,7 @@ pub enum DecisionMaker {
     Temporal,
     Parietal,
     Occipital,
-    CortexOrchestrator,
+    EncephalonOrchestrator,
     External(String),
 }
 
@@ -67,7 +67,7 @@ impl DecisionMaker {
             Self::Temporal => "temporal",
             Self::Parietal => "parietal",
             Self::Occipital => "occipital",
-            Self::CortexOrchestrator => "cortex",
+            Self::EncephalonOrchestrator => "encephalon",
             Self::External(s) => s.as_str(),
         }
     }
@@ -303,7 +303,7 @@ mod tests {
         let d = Decision::builder("t1", DecisionCategory::Approval)
             .reasoning("x")
             .outcome(DecisionOutcome::Approved)
-            .made_by(DecisionMaker::CortexOrchestrator)
+            .made_by(DecisionMaker::EncephalonOrchestrator)
             .confidence(1.5)
             .build();
         assert!((d.confidence - 1.0).abs() < 1e-6);

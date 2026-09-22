@@ -19,7 +19,7 @@
 //! # Why a transport module?
 //!
 //! Zero-trust networking is a **platform-level security primitive**.
-//! Centralising it here means every agent (cortex, tiangong-*,
+//! Centralising it here means every agent (encephalon, tiangong-*,
 //! third-party) uses the same wire, identity model, and dark-service
 //! lifecycle — instead of each caller maintaining its own `XxxDarkService`
 //! wrapper.
@@ -30,7 +30,7 @@
 //! use synapse::transport::ziti;
 //!
 //! # async fn run(router: axum::Router) -> anyhow::Result<()> {
-//! ziti::serve(router, "/etc/cortex/identity.json", "cortex").await?;
+//! ziti::serve(router, "/etc/encephalon/identity.json", "encephalon").await?;
 //! # Ok(()) }
 //! ```
 //

@@ -1,6 +1,6 @@
 //! HTTP client that goes through Ziti instead of the public internet.
 //!
-//! Use when you need to talk to a peer cortex / tiangong service
+//! Use when you need to talk to a peer encephalon / tiangong service
 //! whose service name only resolves inside the Ziti overlay. The
 //! API is intentionally minimal — for richer HTTP needs, prefer
 //! plugging a ZitiStream into your own hyper client.

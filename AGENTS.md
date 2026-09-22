@@ -1,7 +1,7 @@
 # Synapse — 神经突触层 (Shared Foundation Library)
 
 **Updated**: 2026-07-19 (zero-warnings pass + A2A metadata wire-forwarding + WASM-A2A bridge sync path)
-**Status**: ✅ v0.4 lobe module complete + WASM-A2A sync bridge + A2A metadata round-trip via `__cortex_meta_v1__`
+**Status**: ✅ v0.4 lobe module complete + WASM-A2A sync bridge + A2A metadata round-trip via `__encephalon_meta_v1__`
 
 ## Role
 
@@ -66,7 +66,7 @@ The `synapse::lobe` module provides lifecycle glue for stateless skill executors
 ### Helpers
 - `HistorySummarizer` — LLM summarization on overflow
 - `ProviderSet` — Bundles TTS/ASR/LLM/Emotion providers
-- `register_with_cortex()` — POST AgentCard to cortex
+- `register_with_encephalon()` — POST AgentCard to encephalon
 - `build_a2a_router()` — axum router for A2A endpoints
 - `LobeApp` — Convenience builder (register + serve in 10 lines)
 
@@ -115,7 +115,7 @@ only Rust binding on crates.io and is community-maintained, not
 by the OpenZiti project. **Vendor strategy recommended for
 production** — fork `jaschadub/ziti-rust` into the org namespace
 and pin via `[patch.crates-io]` so a stuck upstream doesn't
-take cortex with it.
+take encephalon with it.
 
 ### Migration posture
 
@@ -151,9 +151,9 @@ let mp3 = tts.synthesize("你好", "mp3").await?;
 | Hash | Description |
 |------|-------------|
 | 1728752 | chore: eliminate all remaining warnings (89 → 0) across the workspace |
-| 135f1fd | feat: forward cortex's packed `metadata['name']` through `into_a2a_message` via `__cortex_meta_v1__` prefix (decode via `decode_metadata_from_name`) — closes the v0.1 metadata propagation gap |
+| 135f1fd | feat: forward encephalon's packed `metadata['name']` through `into_a2a_message` via `__encephalon_meta_v1__` prefix (decode via `decode_metadata_from_name`) — closes the v0.1 metadata propagation gap |
 | 9b19949 | docs: allow `ambiguous_glob_reexports` in lib.rs (cosmetic lint exemption, documented) |
-| WASM-A2A bridge | `call_entry` reads N bytes from linear memory at offset `ptr` (was returning placeholder); combined with cortex's `invoke` no longer discarding `_result`, real WASM agents with `handle(json) -> json` reach cortex end-to-end |
+| WASM-A2A bridge | `call_entry` reads N bytes from linear memory at offset `ptr` (was returning placeholder); combined with encephalon's `invoke` no longer discarding `_result`, real WASM agents with `handle(json) -> json` reach encephalon end-to-end |
 | 754c5a8 | feat: add synapse::lobe module — v0.4 stateless skill lifecycle glue |
 | 207bef6 | docs: migrate project-level + family docs to /home/ibloc/Projects/docs/ |
 | c96f4f6 | docs: phase 4.5 status + prefrontal URL convention in shadow contract |

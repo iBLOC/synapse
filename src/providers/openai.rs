@@ -43,7 +43,7 @@ impl OpenAIProvider {
         Ok(Self::new(api_key))
     }
 
-    /// 针对无 KEY 内部 endpoint 的便捷构造（如 neuron-embed / cortex 的内置 LLM）。
+    /// 针对无 KEY 内部 endpoint 的便捷构造（如 neuron-embed / encephalon 的内置 LLM）。
     /// API key 可为占位字符串，base_url 指向实际 OpenAI 兼容 endpoint。
     pub fn for_endpoint(base_url: impl Into<String>, model: impl Into<String>) -> Self {
         Self {

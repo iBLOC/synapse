@@ -37,7 +37,7 @@ impl ReqwestHttpClient {
 
     /// 访问底层 reqwest 客户端（用于不走 LLMProvider 抽象的业务 HTTP 调用）。
     ///
-    /// 业务客户端（如 `cortex/hippocampus` 内部 API）可以直接用 reqwest
+    /// 业务客户端（如 `encephalon/hippocampus` 内部 API）可以直接用 reqwest
     /// 的 fluent API，而 LLM/audio 调用应走 `OpenAIProvider` / `AsrProvider`。
     pub fn raw(&self) -> &Client {
         &self.client

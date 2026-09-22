@@ -25,7 +25,7 @@ pub mod provider_traits;
 pub mod config_manager;
 pub mod wasm_runtime;
 pub mod media_pipeline;
-pub mod cortex_registration;
+pub mod encephalon_registration;
 
 pub use stateless_skill::{
     StatelessSkill, SkillContext, SkillOutput, StatelessSkillRouter, JsonCtx,
@@ -40,4 +40,4 @@ pub use provider_traits::{EmotionProvider, EmotionInput, EmotionOutput};
 pub use config_manager::{ConfigManager, GracefulReload, LobeConfig};
 pub use wasm_runtime::{WasmLobeConfig, WasmLobeRuntime, WasmSkillOutput};
 pub use media_pipeline::{AsrResult, MediaProcessor, VadState, VideoFrame};
-pub use cortex_registration::register_with_cortex;
+pub use encephalon_registration::register_with_encephalon;
