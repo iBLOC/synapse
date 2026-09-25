@@ -195,5 +195,8 @@ pub mod openai;
 pub mod registry;
 pub mod retry;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod catalog;
+
 pub use registry::{ProviderConfig, ProviderRegistry};
 pub use retry::{BackoffConfig, RetryMode, RetryPolicy};
