@@ -1,0 +1,255 @@
+name: Docs Review
+
+# Evaluates whether project documentation (README.md, AGENTS.md, docs/)
+# has fallen behind the code. Two modes:
+#
+#   pull_request — advisory review of the PR diff: a heuristic check
+#                  (code touched without docs) + an AI assessment via
+#                  GitHub Models, posted as one upserted PR comment.
+#   schedule     — weekly repo-wide freshness audit (last docs commit vs
+#                  last code commit) + lychee link check; opens/updates a
+#                  tracking issue when docs drift too far behind.
+#
+# No secrets required: GITHUB_TOKEN covers PR comments, issues and
+# GitHub Models (models: read). The AI step degrades gracefully when
+# Models is not enabled for the repository.
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "README.md"
+      - "AGENTS.md"
+      - "CHANGELOG.md"
+      - "docs/**"
+      - ".github/workflows/docs-review.yml"
+  schedule:
+    - cron: "0 3 * * 1" # Mondays 03:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  models: read
+
+concurrency:
+  group: docs-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Diff against merge base
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          MERGE_BASE=$(git merge-base HEAD "$BASE_SHA")
+          git diff --name-only "$MERGE_BASE" HEAD > /tmp/changed.txt
+          git diff --stat "$MERGE_BASE" HEAD | tail -n 1 > /tmp/diffstat.txt
+          git diff "$MERGE_BASE" HEAD | head -c 24000 > /tmp/diff.patch
+
+          CODE_COUNT=$(grep -cE '^(src/|Cargo\.(toml|lock))' /tmp/changed.txt || true)
+          DOCS_COUNT=$(grep -cE '^(README\.md|AGENTS\.md|CHANGELOG\.md|docs/)' /tmp/changed.txt || true)
+
+          if [ "${CODE_COUNT:-0}" -gt 0 ] && [ "${DOCS_COUNT:-0}" -eq 0 ]; then
+            VERDICT="⚠️ Code changed without touching any docs — README.md / AGENTS.md / docs/ may need updating."
+          else
+            VERDICT="✅ Docs were touched alongside code, or there are no code changes."
+          fi
+
+          {
+            echo "## 📚 Docs review"
+            echo
+            echo "Code files changed: ${CODE_COUNT:-0} · Doc files changed: ${DOCS_COUNT:-0}"
+            echo
+            echo "$VERDICT"
+            echo
+            echo "<details><summary>Changed files</summary>"
+            echo
+            echo '```'
+            cat /tmp/changed.txt
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "verdict<<EOF"
+            echo "$VERDICT"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: AI assessment (GitHub Models)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          SYSTEM_PROMPT=$(cat <<'EOF'
+          You are a documentation maintainer for the Synapse Rust repository.
+          You are given a PR's changed files, diff stat and (truncated) diff.
+          Assess whether documentation needs updating: README.md, AGENTS.md,
+          CHANGELOG.md and the VitePress site under docs/ (guide/, concepts/,
+          howto/, reference/). Reply in concise markdown: a one-line verdict
+          starting with NEEDS UPDATE or NO UPDATE NEEDED, then a short bullet
+          list of exactly which files and sections to touch and why. If
+          nothing is needed, say so plainly. Do not restate the diff.
+          EOF
+          )
+          PAYLOAD=$(jq -n \
+            --arg sys "$SYSTEM_PROMPT" \
+            --arg files "$(cat /tmp/changed.txt)" \
+            --arg stat "$(cat /tmp/diffstat.txt)" \
+            --arg diff "$(cat /tmp/diff.patch)" \
+            '{model: "openai/gpt-4o-mini", temperature: 0.2, max_tokens: 600,
+              messages: [
+                {role: "system", content: $sys},
+                {role: "user", content: ("Changed files:\n" + $files + "\n\nDiff stat:\n" + $stat + "\n\nDiff (truncated):\n" + $diff)}
+              ]}')
+          curl -sS --max-time 60 https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            | jq -r '.choices[0].message.content // empty' > /tmp/ai.md
+          if [ ! -s /tmp/ai.md ]; then
+            echo "_AI assessment unavailable (GitHub Models not enabled for this repository — the heuristic verdict above still applies)._" > /tmp/ai.md
+          fi
+
+      - name: Upsert PR comment
+        run: |
+          set -euo pipefail
+          PRNUM="${{ github.event.pull_request.number }}"
+          {
+            echo "<!-- docs-review-bot -->"
+            echo "## 📚 Docs review (advisory)"
+            echo
+            echo "${{ steps.diff.outputs.verdict }}"
+            echo
+            echo "### AI assessment"
+            echo
+            cat /tmp/ai.md
+            echo
+            echo "<sub>docs-review workflow · comment is updated in place on each push</sub>"
+          } > /tmp/comment.md
+          COMMENT_ID=$(gh api "repos/$GH_REPO/issues/$PRNUM/comments" \
+            --jq '.[] | select(.body | startswith("<!-- docs-review-bot -->")) | .id' \
+            | tail -n 1 || true)
+          if [ -n "$COMMENT_ID" ]; then
+            jq -n --rawfile body /tmp/comment.md '{body: $body}' \
+              | gh api -X PATCH "repos/$GH_REPO/issues/comments/$COMMENT_ID" \
+                  --input - -H "Content-Type: application/json"
+          else
+            gh pr comment "$PRNUM" --body-file /tmp/comment.md
+          fi
+
+  audit:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Freshness audit
+        id: audit
+        run: |
+          set -euo pipefail
+          DOCS_PATHS="README.md AGENTS.md CHANGELOG.md docs/"
+          CODE_PATHS="src/ Cargo.toml Cargo.lock"
+
+          DOCS_SHA=$(git log -1 --format=%H -- $DOCS_PATHS)
+          CODE_SHA=$(git log -1 --format=%H -- $CODE_PATHS)
+          DOCS_DATE=$(git log -1 --format=%cs -- $DOCS_PATHS)
+          CODE_DATE=$(git log -1 --format=%cs -- $CODE_PATHS)
+          BEHIND=$(git rev-list --count "$DOCS_SHA"..HEAD -- $CODE_PATHS)
+          DRIFT=$(( ( $(git log -1 --format=%ct -- $CODE_PATHS) - $(git log -1 --format=%ct -- $DOCS_PATHS) ) / 86400 ))
+          [ "$DRIFT" -lt 0 ] && DRIFT=0
+
+          STALE=false
+          if [ "$DRIFT" -gt 30 ] && [ "$BEHIND" -gt 10 ]; then STALE=true; fi
+
+          git log --oneline -15 "$DOCS_SHA"..HEAD -- $CODE_PATHS > /tmp/recent-code.txt || true
+
+          {
+            echo "## 🕰️ Docs freshness audit"
+            echo
+            echo "| Signal | Value |"
+            echo "|---|---|"
+            echo "| Last docs commit | ${DOCS_SHA:0:9} ($DOCS_DATE) |"
+            echo "| Last code commit | ${CODE_SHA:0:9} ($CODE_DATE) |"
+            echo "| Code commits since last docs touch | $BEHIND |"
+            echo "| Drift | $DRIFT days |"
+            echo "| Stale (>30 days and >10 code commits) | $STALE |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "stale=$STALE"
+            echo "drift=$DRIFT"
+            echo "behind=$BEHIND"
+            echo "docs_sha=$DOCS_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check documentation links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --no-progress --max-retries 3 --format markdown
+            --exclude 'localhost|127\.0\.0\.1|example\.com'
+            --exclude '^(/|\./|\.\.)'
+            "README.md" "AGENTS.md" "CHANGELOG.md"
+            "docs/*.md" "docs/guide/**/*.md" "docs/concepts/**/*.md"
+            "docs/howto/**/*.md" "docs/reference/**/*.md"
+          fail: false
+          output: /tmp/lychee-report.md
+
+      - name: Append link report to summary
+        if: always()
+        run: |
+          if [ -s /tmp/lychee-report.md ]; then
+            {
+              echo
+              echo "## 🔗 Link check"
+              echo
+              tail -n 40 /tmp/lychee-report.md
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Open tracking issue when stale
+        if: steps.audit.outputs.stale == 'true'
+        run: |
+          set -euo pipefail
+          TITLE="docs: code has drifted ahead of documentation"
+          {
+            echo "The weekly docs freshness audit found code moving ahead of the documentation."
+            echo
+            echo "- Last docs commit: ${{ steps.audit.outputs.docs_sha }}"
+            echo "- Drift: ${{ steps.audit.outputs.drift }} days / ${{ steps.audit.outputs.behind }} code commits since last docs touch"
+            echo
+            echo "Recent code commits since the last docs touch:"
+            echo
+            echo '```'
+            cat /tmp/recent-code.txt
+            echo '```'
+            echo
+            echo "Consider updating README.md / AGENTS.md / CHANGELOG.md and the VitePress site under docs/."
+          } > /tmp/issue.md
+          EXISTING=$(gh issue list --state open --search "docs: code has drifted in:title" --json number --jq '.[0].number' || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body-file /tmp/issue.md
+          else
+            gh issue create --title "$TITLE" --body-file /tmp/issue.md
+          fi
