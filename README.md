@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-blue)]()
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
-📖 **Full documentation:** <https://synapse-rs.github.io/synapse/> (build locally with `mdbook serve docs/`)
+📖 **Full documentation:** <https://ibloc.github.io/synapse/> (build locally with `cd docs && npm run dev`)
 
 ## ✨ 核心能力
 

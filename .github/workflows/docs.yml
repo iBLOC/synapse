@@ -1,0 +1,79 @@
+name: Docs
+
+# Build the VitePress handbook (docs/) + rustdoc API docs and publish to
+# GitHub Pages at https://ibloc.github.io/synapse/.
+# PRs get a build check only; deploys happen on pushes to master.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build rustdoc API docs
+        run: cargo doc --no-deps --locked
+
+      - name: Build VitePress site
+        working-directory: docs
+        run: |
+          npm ci
+          BASE_PATH=/${{ github.event.repository.name }} npm run build:pages
+
+      - name: Stage rustdoc under /api
+        run: |
+          SITE="docs/.vitepress/dist"
+          mkdir -p "$SITE/api"
+          # copy the whole target/doc root: crate pages reference shared
+          # static.files/, src/, trait.impl/ etc. via ../ relative paths
+          cp -r target/doc/. "$SITE/api/"
+          # rustdoc has no root index — redirect /api/ into the crate docs
+          printf '<!doctype html><meta http-equiv="refresh" content="0;url=./synapse/index.html">' > "$SITE/api/index.html"
+          # skip Jekyll processing on Pages (underscore dirs, large asset sets)
+          touch "$SITE/.nojekyll"
+
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/.vitepress/dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

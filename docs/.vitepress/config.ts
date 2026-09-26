@@ -3,6 +3,10 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'Synapse',
   description: 'Rust-based intelligent agent development framework',
+  // Project Pages serves the site at /<repo>/. `build:pages` rewrites this
+  // line via scripts/write-base.mjs; `npm run dev` keeps '/' so the
+  // local server works without any extra setup.
+  base: "/synapse/",
   lang: 'en-US',
   cleanUrls: true,
   lastUpdated: true,
@@ -23,11 +27,17 @@ export default defineConfig({
       { text: 'Guide', link: '/guide/intro' },
       { text: 'Concepts', link: '/concepts/architecture' },
       { text: 'How-to', link: '/howto/simple-agent' },
-      { text: 'API', link: '/reference/agent-trait' },
+      {
+        text: 'API',
+        items: [
+          { text: 'API Reference', link: '/reference/agent-trait' },
+          { text: 'Rustdoc', link: '/api/synapse/' },
+        ],
+      },
       {
         text: 'v0.1.0',
         items: [
-          { text: 'Changelog', link: '/changelog' },
+          { text: 'Changelog', link: '/CHANGELOG' },
           { text: 'Roadmap', link: '/roadmap' },
           { text: 'Comparison', link: '/comparison' },
         ],
@@ -91,7 +101,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/synapse-rs/synapse' },
+      { icon: 'github', link: 'https://github.com/iBLOC/synapse' },
     ],
 
     footer: {
@@ -100,6 +110,7 @@ export default defineConfig({
     },
 
     editLink: {
+      pattern: 'https://github.com/iBLOC/synapse/edit/master/docs/:path',
       text: 'Edit this page on GitHub',
     },
 
@@ -131,10 +142,5 @@ export default defineConfig({
       infoLabel: 'Info',
       detailsLabel: 'Details',
     },
-  },
-
-  editLink: {
-    pattern: 'https://github.com/synapse-rs/synapse/edit/master/docs/:path',
-    text: 'Edit this page on GitHub',
   },
 })

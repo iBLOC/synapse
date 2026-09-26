@@ -13,7 +13,7 @@ hero:
       link: /guide/quick-start
     - theme: alt
       text: GitHub
-      link: https://github.com/synapse-rs/synapse
+      link: https://github.com/iBLOC/synapse
 
 features:
   - title: 🚀 Production-Ready Core
