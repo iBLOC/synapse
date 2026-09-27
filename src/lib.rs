@@ -20,6 +20,8 @@
 #![allow(ambiguous_glob_reexports)]
 
 pub mod a2a;
+#[cfg(all(not(target_arch = "wasm32"), feature = "acp"))]
+pub mod acp;
 pub mod adk;
 pub mod agent;
 pub mod callbacks;

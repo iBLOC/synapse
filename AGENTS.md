@@ -1,7 +1,7 @@
 # Synapse — 神经突触层 (Shared Foundation Library)
 
-**Updated**: 2026-07-19 (zero-warnings pass + A2A metadata wire-forwarding + WASM-A2A bridge sync path)
-**Status**: ✅ v0.4 lobe module complete + WASM-A2A sync bridge + A2A metadata round-trip via `__encephalon_meta_v1__`
+**Updated**: 2026-09-26 (added `synapse::acp` client module — drives external ACP-speaking agents via the official `agent-client-protocol` 2.2 SDK); 2026-09-25 (`transport::ziti` per `8ff2294` (2026-09-09), audio providers per `cdb6249` (2026-08-22); A2A metadata wire-forwarding via `__encephalon_meta_v1__` per `135f1fd`; WASM-A2A bridge sync path; zero-warnings pass prior baseline 2026-07-19)
+**Status**: ✅ v0.4 lobe module complete + WASM-A2A sync bridge + A2A metadata round-trip via `__encephalon_meta_v1__` + `transport::ziti` zero-trust A2A over OpenZiti + `acp` client driving external ACP agents (opencode / claude-code-acp / codex-acp)
 
 ## Role
 
@@ -12,6 +12,7 @@ Shared foundation library for the Shadow platform. Provides A2A protocol, WASM r
 ```
 synapse/src/
 ├── a2a/                    # Agent-to-Agent protocol (card, client, server)
+├── acp/                    # ACP client (opencode / claude-code-acp / codex-acp via official agent-client-protocol 2.2 SDK; added 2026-09-26)
 ├── adk/                    # Agent Development Kit (OrchestratorAgent)
 ├── agent/                  # Agent trait + orchestrator
 ├── callbacks/              # Event callbacks
@@ -43,14 +44,16 @@ synapse/src/
 
 ```bash
 cd synapse
-cargo build
+cargo build                    # default — no acp, no ziti, no audio
+cargo build --features acp     # opt in to ACP client integration
 ```
 
 ## Test
 
 ```bash
 cd synapse
-cargo test --lib lobe  # lobe module tests
+cargo test --lib lobe          # lobe module tests
+cargo test --lib acp           # ACP client (requires --features acp)
 ```
 
 ## lobe Module (v0.4)
@@ -83,6 +86,7 @@ The `synapse::lobe` module provides lifecycle glue for stateless skill executors
 - axum 0.8 — HTTP server (for a2a_server)
 - reqwest 0.13 — HTTP client (with multipart feature for audio providers)
 - ziti-sdk 0.3 — **optional**, behind `feature = "ziti"` (zero-trust A2A over OpenZiti)
+- agent-client-protocol 2.2 — **optional**, behind `feature = "acp"` (drives external ACP agents over stdio)
 
 ## `transport::ziti` module (added 2026-09-09)
 
@@ -124,6 +128,119 @@ The module is insulated from callers by the `ZitiGateway` /
 (including an eventual official Rust binding) is a local change
 to `gateway.rs` + `listener.rs`; downstream code is unaffected.
 
+## `acp` Client module (added 2026-09-26)
+
+Client-only integration that drives external coding agents speaking the
+[Agent Client Protocol][acp] (opencode, claude-code-acp, codex-acp,
+…) over stdio and surfaces their output as a normal Synapse
+[`AgentStreamEvent`] stream. Implements the ACP *Client* role inside
+Synapse; speaking the ACP *Agent* role is out of scope for this module.
+
+[acp]: https://agentclientprotocol.com/
+
+Public surface:
+- `AcpAgentSpec::opencode()` / `claude_code()` / `codex()` — built-in
+  presets for the three reference ACP shims; or `AcpAgentSpec::new(name, cmd)`
+  + `.arg(...)` / `.env(k, v)` for fully custom commands.
+- `AcpClient::connect(spec)` — spawn the agent subprocess, run the
+  `initialize` handshake, start a long-lived dispatch task. Returns
+  once the handshake completes; the task keeps running for the
+  lifetime of the client.
+- `client.session().prompt(text)` — send one prompt; returns a
+  `StreamReader<AgentStreamEvent>`. Each call opens a fresh ACP
+  session (`session/new`) on the shared connection — connection and
+  initialize handshake are reused across prompts.
+- `AcpError::Sdk` / `AcpError::Cancelled` — the error enum.
+
+Wire model:
+
+```text
+ ┌────────────────┐    stdio (JSON-RPC)   ┌────────────────────────┐
+ │ synapse::acp   │ ◀────────────────────▶│ opencode / claude-code  │
+ │ AcpClient      │                        │ (external subprocess)   │
+ └────────────────┘                        └────────────────────────┘
+```
+
+The SDK spawns the subprocess for us (via `AcpAgent::new(AcpAgentConfig)`);
+we never touch `tokio::process::Command` directly. Each `AcpSessionHandle`
+owns one ACP session over one stdio transport.
+
+### Why the official SDK
+
+Four correctness traps we explicitly avoided by depending on
+`agent-client-protocol` instead of hand-rolling a JSON-RPC client:
+
+1. **Protocol version negotiation** — the SDK downgrades/refreshes based
+   on `InitializeResponse.protocol_version`. A hand-rolled client would
+   freeze on `V1` and silently break against v2 agents.
+2. **Request/response correlation** — `SentRequest::block_task().await`
+   plus internal request-id bookkeeping eliminates the "which response
+   belongs to which request" race. DIY clients almost always get this
+   wrong eventually.
+3. **`$/cancelRequest` semantics** — UI cancel round-trips correctly
+   even when a proxy sits in front. DIY clients typically forget the
+   JSON-RPC cancel notification and leak subprocess work after stop.
+4. **stdio framing** — `Stdio` handles `Content-Length` headers vs
+   line-delimited frames across agents. `AsyncBufReadExt::lines()` does
+   not.
+
+Bonus forward-compatibility the SDK buys us for free:
+- `Conductor` / `Proxy` roles in `role::acp` are ready for multi-agent
+  fan-out; we don't need to redesign the connection layer when
+  shadow-desktop starts driving opencode + claude-code-acp side-by-side.
+- `with_mcp_server` lets Synapse inject its own MCP servers into a
+  session — agents call our tools without us opening a second port.
+- `SessionUpdate` is `#[non_exhaustive]`, which forces
+  `translate_update` to go through `serde_json` round-trip. New schema
+  variants fall through to the `_ => Vec::new()` arm instead of breaking
+  compilation.
+
+### SDK caveat
+
+ACP ships an official SDK for Rust — unlike OpenZiti — so there is no
+vendor-strategy caveat here. The crate (`agent-client-protocol`, Apache-2.0)
+is the official binding maintained at [agentclientprotocol/rust-sdk][sdk].
+Pin to `2.2` for now; bump on minor releases only after reading the
+changelog, since the public API is still pre-1.0.
+
+[sdk]: https://github.com/agentclientprotocol/rust-sdk
+
+### Build & test
+
+Gated by `feature = "acp"` (default off) and **non-wasm only** — the
+upstream SDK does not expose `AcpAgent` / `Stdio` on `target_arch =
+"wasm32"`.
+
+```bash
+cargo build  -p synapse --features acp
+cargo test   -p synapse --features acp --lib acp
+```
+
+Five unit tests cover `AcpAgentSpec` builder behavior and the
+`SessionUpdate → AgentStreamEvent` translator (Pending/InProgress →
+`ToolStart`, Completed/Failed → `ToolEnd`, `AgentMessageChunk` →
+`TokenDelta`).
+
+### Migration posture
+
+Callers depend only on `AcpClient` / `AcpSessionHandle` / `AcpAgentSpec`
+/ `AcpError`. Wire-level types (`SessionUpdate`, `ToolCallStatus`, …)
+are hidden behind `translate.rs`, so a future SDK major bump (v3) that
+renames or restructures those types is a localized change to the
+translator — public API stays put.
+
+### Known gaps (future work)
+
+- **Outbound `Dispatch::Request`** from the agent (e.g. fs/read) is
+  answered with a generic `InternalError`. When the time comes to let
+  agents call back into Synapse, plug `Builder::on_receive_request`
+  into the `connect_with` chain.
+- **Capability advertisement** — we always send `ProtocolVersion::V1`
+  regardless of what the agent advertised. If we start depending on v2
+  features (`V2SessionBuilder`, MCP-over-ACP), switch the
+  `Client::default()` to `Client::default().v2()` so negotiation
+  fails loud when the agent is too old.
+
 ## Audio Providers (added 2026-08-22)
 
 ```rust
@@ -157,3 +274,4 @@ let mp3 = tts.synthesize("你好", "mp3").await?;
 | 754c5a8 | feat: add synapse::lobe module — v0.4 stateless skill lifecycle glue |
 | 207bef6 | docs: migrate project-level + family docs to /home/ibloc/Projects/docs/ |
 | c96f4f6 | docs: phase 4.5 status + prefrontal URL convention in shadow contract |
+| 1b547f2 | feat(acp): add `synapse::acp` client module — drive external ACP agents (opencode / claude-code-acp / codex-acp) over stdio via the official `agent-client-protocol` 2.2 SDK; gated by `feature = "acp"` (off by default, non-wasm only) |
