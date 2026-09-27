@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde_json::Value;
 use thiserror::Error;
 
-use crate::lobe::{SkillContext, SkillOutput, StatelessSkill};
+use crate::lobe::{SkillOutput, StatelessSkill};
 
 #[derive(Debug, Error)]
 pub enum NamespaceError {
@@ -31,6 +31,10 @@ impl Namespace {
             name: name.into(),
             skills: HashMap::new(),
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn register(&mut self, skill: Arc<dyn StatelessSkill>) {
@@ -144,6 +148,7 @@ fn parse_qualified_name(name: &str) -> Result<(&str, &str), NamespaceError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lobe::SkillContext;
 
     struct EchoSkill;
 

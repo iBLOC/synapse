@@ -13,7 +13,7 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use super::causal::{CausalChain, CausalDirection};
-use super::decision::{Decision, DecisionCategory, DecisionMaker, DecisionOutcome};
+use super::decision::{Decision, DecisionCategory, DecisionMaker};
 
 /// Query parameters for `DecisionStore::query`.
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -385,6 +385,7 @@ impl DecisionStore for HippocampusDecisionStore {
 mod tests {
     use super::*;
     use crate::decision::Decision;
+    use crate::decision::DecisionOutcome;
 
     fn mk(tenant: &str, outcome: DecisionOutcome) -> Decision {
         Decision::builder(tenant, DecisionCategory::Approval)

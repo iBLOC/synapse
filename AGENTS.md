@@ -274,4 +274,4 @@ let mp3 = tts.synthesize("你好", "mp3").await?;
 | 754c5a8 | feat: add synapse::lobe module — v0.4 stateless skill lifecycle glue |
 | 207bef6 | docs: migrate project-level + family docs to /home/ibloc/Projects/docs/ |
 | c96f4f6 | docs: phase 4.5 status + prefrontal URL convention in shadow contract |
-| 1b547f2 | feat(acp): add `synapse::acp` client module — drive external ACP agents (opencode / claude-code-acp / codex-acp) over stdio via the official `agent-client-protocol` 2.2 SDK; gated by `feature = "acp"` (off by default, non-wasm only) |
+| 1429a95 | feat(acp): add `synapse::acp` client module — drive external ACP agents (opencode / claude-code-acp / codex-acp) over stdio via the official `agent-client-protocol` 2.2 SDK; gated by `feature = "acp"` (off by default, non-wasm only) |

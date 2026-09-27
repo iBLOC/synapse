@@ -19,7 +19,6 @@
 //! 所有 lobe 应使用本模块而非自建 metrics_exporter。
 
 use std::net::SocketAddr;
-use std::sync::OnceLock;
 
 #[cfg(feature = "metrics")]
 use axum::{routing::get, Router};
@@ -27,6 +26,8 @@ use axum::{routing::get, Router};
 use metrics::{counter, describe_counter, describe_histogram, histogram};
 #[cfg(feature = "metrics")]
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
+#[cfg(feature = "metrics")]
+use std::sync::OnceLock;
 
 #[cfg(feature = "metrics")]
 static HANDLE: OnceLock<PrometheusHandle> = OnceLock::new();
