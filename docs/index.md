@@ -17,7 +17,7 @@ hero:
 
 features:
   - title: 🚀 Production-Ready Core
-    details: Runnable, Graph, Chain, ReAct Agent. 279 tests passing. Apache 2.0.
+    details: Runnable, Graph, Chain, ReAct Agent. 292 tests passing. Apache 2.0.
   - title: 🤖 4 MultiAgent Patterns
     details: Router, Orchestrator, Handoff, Hybrid. Nested composition. LLM-driven and rule-based.
   - title: 📚 RAG Out of the Box

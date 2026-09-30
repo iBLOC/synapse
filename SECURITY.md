@@ -15,7 +15,7 @@ privately to the maintainers.
 
 ### How to Report
 
-Email: security@synapse-rs.dev (placeholder)
+Email: security@ibloc.dev (placeholder)
 
 Include:
 - Description of the vulnerability

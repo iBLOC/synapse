@@ -51,4 +51,4 @@ Planned future directions for Synapse.
 ## Contributing
 
 Want to help shape the roadmap? Open an issue on GitHub or check
-out [CONTRIBUTING.md](https://github.com/synapse-rs/synapse/blob/master/CONTRIBUTING.md).
+out [CONTRIBUTING.md](https://github.com/ibloc/synapse/blob/master/CONTRIBUTING.md).

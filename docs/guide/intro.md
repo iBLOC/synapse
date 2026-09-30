@@ -29,7 +29,7 @@ WASM sandboxing.
 - **WASM isolation** — Run agents in `wasi` sandboxes (PFC runtime)
 - **MultiAgent 4-mode coverage** — Router, Orchestrator, Handoff, Hybrid
 - **Type-safe Rust API** — No Python runtime overhead, async-native
-- **205 tests** — Comprehensive unit + integration coverage, all mocked
+- **292 tests** — Comprehensive unit + integration coverage, all mocked
 
 ## When to Use Synapse?
 
@@ -46,7 +46,7 @@ Use Synapse when you need:
 
 - **Version:** 0.1.0
 - **License:** Apache 2.0
-- **Tests:** 205 passing
+- **Tests:** 292 passing
 - **Production-ready components:** Core agent/RAG/MCP/A2A/MultiAgent
 - **Stable APIs:** Yes (semver respected)
 

@@ -55,7 +55,7 @@ constructive in all interactions.
 
 ```bash
 # Clone
-git clone https://github.com/synapse-rs/synapse.git
+git clone https://github.com/ibloc/synapse.git
 cd synapse
 
 # Install Rust (if not installed)

@@ -6,8 +6,8 @@ rust-version = "1.85"
 description = "Rust-based intelligent agent development framework"
 license = "Apache-2.0"
 authors = ["Synapse Contributors"]
-repository = "https://github.com/synapse-rs/synapse"
-homepage = "https://synapse-rs.github.io/synapse/"
+repository = "https://github.com/ibloc/synapse"
+homepage = "https://ibloc.github.io/synapse/"
 
 [dependencies]
 # Logging & tracing
