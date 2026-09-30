@@ -263,6 +263,22 @@ let mp3 = tts.synthesize("你好", "mp3").await?;
 - `AgentCard::placeholder(name)` — 占位 AgentCard（替代 `new(name, "", "", "0.0.0")`）
 - `ReqwestHttpClient::with_timeout(Duration)` — 带超时的 reqwest HTTP 客户端
 
+## Documentation / 文档索引
+
+Concept docs under `docs/concepts/` are the deep-dive for each major module. Concept 文档在 `docs/concepts/` 下，每个核心模块一份：
+
+- [`docs/concepts/a2a.md`](docs/concepts/a2a.md) — A2A protocol (client + server + TaskStore trait) / A2A 协议（client + server + TaskStore trait）
+- [`docs/concepts/acp.md`](docs/concepts/acp.md) — `synapse::acp` client driving opencode / claude-code-acp / codex-acp / 驱动 opencode / claude-code-acp / codex-acp
+- [`docs/concepts/lobe.md`](docs/concepts/lobe.md) — `synapse::lobe` v0.4 stateless skill lifecycle glue / 无状态 skill 生命周期 glue
+- [`docs/concepts/ziti.md`](docs/concepts/ziti.md) — `transport::ziti` zero-trust A2A over OpenZiti / 零信任 A2A over OpenZiti
+- [`docs/concepts/architecture.md`](docs/concepts/architecture.md) — full module tree / 全模块树
+- [`docs/concepts/mcp.md`](docs/concepts/mcp.md) — Model Context Protocol (client + server) / Model Context Protocol（client + server）
+- [`docs/concepts/wasm.md`](docs/concepts/wasm.md) — WASM agent ABI v1 + WasiHttpClient / WASM agent ABI v1 + WasiHttpClient
+- [`docs/concepts/multiagent.md`](docs/concepts/multiagent.md) — Router / Orchestrator / Handoff / Hybrid / 四种模式
+- [`docs/concepts/agent.md`](docs/concepts/agent.md) · [`model.md`](docs/concepts/model.md) · [`tool.md`](docs/concepts/tool.md) · [`document-rag.md`](docs/concepts/document-rag.md) · [`llm-retry-policy.md`](docs/concepts/llm-retry-policy.md) · [`session-event-log.md`](docs/concepts/session-event-log.md) · [`tool-namespace.md`](docs/concepts/tool-namespace.md) · [`waterfall-events.md`](docs/concepts/waterfall-events.md) — remaining concept docs / 其余概念文档
+
+Bilingual README at root: [`README.md`](README.md) (zh primary + en mirror / 中文主 + 英文镜像).
+
 ## Commits
 
 | Hash | Description |
