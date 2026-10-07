@@ -1,6 +1,6 @@
 //! `WasmLobeRuntime` — lifecycle for WASM-packaged lobes.
 //!
-//! Each lobe can be compiled to `wasm32-wasip1` and loaded by Cortex.
+//! Each lobe can be compiled to `wasm32-wasip1` and loaded by Telencephalon.
 //! The runtime provides: load, invoke_skill, reload, unload.
 
 use std::sync::Arc;

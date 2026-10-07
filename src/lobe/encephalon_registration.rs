@@ -1,4 +1,4 @@
-//! Helper to register a native lobe with Cortex (L3.5).
+//! Helper to register a native lobe with Telencephalon (L3.5).
 //!
 //! POSTs to `{encephalon_url}/encephalon/lobes/{name}` with the lobe's
 //! AgentCard. Best-effort: on failure, log a warning. The lobe
