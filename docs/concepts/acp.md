@@ -22,9 +22,12 @@ The [`synapse::acp`](../../src/acp/mod.rs) module drives external coding agents 
 └────────────────┘                        └────────────────────────┘
 ```
 
-The SDK spawns the subprocess for us (via [`AcpAgent`][sdk-agent]); we never touch `tokio::process::Command` directly. Each [`AcpSession`](../../src/acp/session.rs) owns one `agent-client-protocol` session over one stdio transport.
+The SDK spawns the subprocess for us (via [`AcpAgent`][sdk-agent]); we never touch `tokio::process::Command` directly. Each [`AcpClient::session()`](../../src/acp/client.rs) returns a borrowed handle — the underlying `agent-client-protocol` session is opened fresh inside `prompt()` (one session per prompt on the same shared stdio transport).
 
-*SDK 由 [`AcpAgent`][sdk-agent] 负责 spawn 子进程；我们不直接碰 `tokio::process::Command`。每个 [`AcpSession`](../../src/acp/session.rs) 在一条 stdio transport 上持有一个 ACP session。*
+> **Note / 备注** — `AcpSession` is a public re-export alias of `AcpSessionHandle` (see [`src/acp/session.rs`](../../src/acp/session.rs)). Both names refer to the same type; this document uses `AcpSession` for brevity.
+> *`AcpSession` 是 `AcpSessionHandle` 的公开 re-export 别名（见 [`src/acp/session.rs`](../../src/acp/session.rs)）。两个名字指向同一类型；本文为简洁起见用 `AcpSession`。*
+
+*SDK 由 [`AcpAgent`][sdk-agent] 负责 spawn 子进程；我们不直接碰 `tokio::process::Command`。每次 [`AcpClient::session()`](../../src/acp/client.rs) 返回的都是借用句柄；底层 `agent-client-protocol` session 在 `prompt()` 内部按调用逐次新建（同一 stdio transport 上每个 prompt 开一个 session）。*
 
 [sdk-agent]: https://docs.rs/agent-client-protocol/latest/agent_client_protocol/struct.AcpAgent.html
 
@@ -87,7 +90,7 @@ while let Some(ev) = events.next().await {
 | `AcpClient` | `struct` (cheap-clone via `Arc`) | One connected client to one external ACP agent / 持有一条外部 ACP agent 连接的客户端 |
 | `AcpClient::connect(spec)` | `async fn` | Spawn subprocess + `initialize` handshake + start dispatch task / 起子进程、跑握手、起 dispatch 任务 |
 | `AcpClient::session()` | `fn -> AcpSessionHandle<'_>` | Borrowed handle for issuing prompts / 借用句柄用于发起 prompt |
-| `AcpSessionHandle::prompt(text)` | `async fn -> Result<StreamReader<AgentStreamEvent>, AcpError>` | Send one prompt, stream events / 发一个 prompt，流式返回事件 |
+| `AcpSessionHandle::prompt(text)` *(a.k.a. `AcpSession::prompt`)* | `async fn -> Result<StreamReader<AgentStreamEvent>, AcpError>` | Send one prompt, stream events / 发一个 prompt，流式返回事件 |
 | `AcpAgentSpec` | `struct` (with builder) | Pure-data description of the agent subprocess / 描述子进程的纯数据 |
 | `AcpAgentSpec::opencode()` | preset | `opencode --acp` / 调用 opencode |
 | `AcpAgentSpec::claude_code()` | preset | `npx -y @agentclientprotocol/claude-agent-acp@latest` / 调用 claude-code |
@@ -126,13 +129,13 @@ The translator in [`src/acp/translate.rs`](../../src/acp/translate.rs) turns the
 | `AgentMessageChunk` | `TokenDelta { text, agent }` |
 | `StopReason::EndTurn` | `Final { agent, message }` |
 
-Five unit tests cover `AcpAgentSpec` builder behaviour and the translator.
-*五个单测覆盖 `AcpAgentSpec` builder 与翻译器。*
+Nine unit tests cover `AcpAgentSpec` builder behaviour, the `SessionUpdate → AgentStreamEvent` translator, and the `SessionNotification` envelope parser (envelope / bare-update / unparsable / round-trip).
+*九个单测覆盖 `AcpAgentSpec` builder、`SessionUpdate → AgentStreamEvent` 翻译器、以及 `SessionNotification` envelope 解析（envelope / 裸 update / 不可解析 / 往返）。*
 
 ## Migration posture · 升级路径
 
-Callers depend only on `AcpClient` / `AcpSessionHandle` / `AcpAgentSpec` / `AcpError`. Wire-level types (`SessionUpdate`, `ToolCallStatus`, …) are hidden behind `translate.rs`, so a future SDK major bump (v3) that renames or restructures those types is a localized change to the translator — the public API stays put.
-*调用方只依赖 `AcpClient` / `AcpSessionHandle` / `AcpAgentSpec` / `AcpError`。线协议类型（`SessionUpdate`、`ToolCallStatus` …）被 `translate.rs` 隔离，SDK 未来大版本（v3）改名/重构只是翻译器局部改动，公开 API 不动。*
+Callers depend only on `AcpClient` / `AcpSession` (`AcpSessionHandle`) / `AcpAgentSpec` / `AcpError`. Wire-level types (`SessionUpdate`, `ToolCallStatus`, …) are hidden behind `translate.rs`, so a future SDK major bump (v3) that renames or restructures those types is a localized change to the translator — the public API stays put.
+*调用方只依赖 `AcpClient` / `AcpSession`（`AcpSessionHandle`）/`AcpAgentSpec` / `AcpError`。线协议类型（`SessionUpdate`、`ToolCallStatus` …）被 `translate.rs` 隔离，SDK 未来大版本（v3）改名/重构只是翻译器局部改动，公开 API 不动。*
 
 ## SDK caveat · SDK 注意事项
 

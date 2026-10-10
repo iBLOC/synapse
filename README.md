@@ -326,13 +326,13 @@ async fn main() -> anyhow::Result<()> {
 
 ```bash
 cargo test                           # default features — 292 tests
-cargo test --features acp            # +ACP client tests
+cargo test --features acp            # +9 ACP client tests
 cargo test --features ziti           # +Ziti transport tests
 cargo test --all-features            # everything
 ```
 
-**292 tests passing**（截至 2026-09-30，含 5 个 ACP 单测、9 个 synapse::lobe 集成测试、双标准模型 list 单测等）。
-*As of 2026-09-30: 292 tests passing (incl. 5 ACP unit tests, 9 synapse::lobe integration tests, dual-standard model listing tests).*
+**301 tests passing with `--features acp`, 292 default**（截至 2026-10-10，含 9 个 ACP 单测、9 个 synapse::lobe 集成测试、双标准模型 list 单测等）。
+*As of 2026-10-10: 301 tests passing with `--features acp`, 292 default (incl. 9 ACP unit tests, 9 synapse::lobe integration tests, dual-standard model listing tests).*
 
 ```bash
 cargo test --lib providers          # provider catalog + retry policy

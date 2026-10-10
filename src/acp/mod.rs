@@ -18,8 +18,10 @@
 //! ```
 //!
 //! The SDK spawns the subprocess for us (via [`AcpAgent`]); we never touch
-//! `tokio::process::Command` directly. Each [`AcpSession`] owns one
-//! `agent-client-protocol` session over one stdio transport.
+//! `tokio::process::Command` directly. [`AcpClient`] owns one stdio
+//! transport plus the background dispatch task; each call to
+//! [`AcpSession::prompt`] opens a fresh `agent-client-protocol` session
+//! (`session/new`) on that transport.
 //!
 //! # Build
 //!

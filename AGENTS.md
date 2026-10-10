@@ -216,10 +216,11 @@ cargo build  -p synapse --features acp
 cargo test   -p synapse --features acp --lib acp
 ```
 
-Five unit tests cover `AcpAgentSpec` builder behavior and the
+Nine unit tests cover `AcpAgentSpec` builder behavior, the
 `SessionUpdate → AgentStreamEvent` translator (Pending/InProgress →
 `ToolStart`, Completed/Failed → `ToolEnd`, `AgentMessageChunk` →
-`TokenDelta`).
+`TokenDelta`), and the `SessionNotification` envelope parser
+(envelope / bare-update / unparsable / round-trip).
 
 ### Migration posture
 
