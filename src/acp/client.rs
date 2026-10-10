@@ -243,17 +243,16 @@ fn translate_session_message(
             use agent_client_protocol::Dispatch as D;
             match dispatch {
                 D::Notification(notif) => {
-                    // The notification is a `SessionUpdate` by protocol
-                    // definition here. Downcast via JSON to get the
-                    // concrete variant back — `translate_update` knows
-                    // the wire shape.
-                    if let Ok(update) = serde_json::from_value::<
-                        agent_client_protocol::schema::v1::SessionUpdate,
-                    >(serde_json::to_value(&notif).ok()?)
-                    {
-                        translate_update(agent_name, update).into_iter().next()
-                    } else {
-                        None
+                    // `notif` is an untyped `{method, params}` envelope. For
+                    // `session/update` the params are a `SessionNotification`
+                    // (sessionId + update); some future SDK typings may hand
+                    // us a bare `SessionUpdate`, so try both — a failed parse
+                    // is logged, never dropped silently.
+                    match parse_session_update(&notif.method, notif.params) {
+                        Some(update) => {
+                            translate_update(agent_name, update).into_iter().next()
+                        }
+                        None => None,
                     }
                 }
                 D::Request(_, responder) => {
@@ -279,7 +278,105 @@ fn translate_session_message(
 }
 
 // ---------------------------------------------------------------------------
-// (No helpers needed — `read_update` returns `Result<SessionMessage,
-// Error>` and the loop in `drive_one_prompt` handles both shapes
-// inline.)
+// Helpers
 // ---------------------------------------------------------------------------
+
+/// Parse the `params` of an ACP `session/update` notification into a
+/// [`SessionUpdate`].
+///
+/// Tries the [`SessionNotification`] envelope first (the actual wire
+/// shape — `{sessionId, update}`), then a bare [`SessionUpdate`] (some
+/// future SDK typings may hand us that). Returns `None` and logs at
+/// debug level if neither shape parses; never drops silently.
+fn parse_session_update(
+    method: &str,
+    params: serde_json::Value,
+) -> Option<agent_client_protocol::schema::v1::SessionUpdate> {
+    use agent_client_protocol::schema::v1::{SessionNotification, SessionUpdate};
+    let update = serde_json::from_value::<SessionNotification>(params.clone())
+        .ok()
+        .map(|envelope| envelope.update)
+        .or_else(|| serde_json::from_value::<SessionUpdate>(params).ok());
+    if update.is_none() {
+        tracing::debug!(method = %method, "ignoring unparsable ACP notification");
+    }
+    update
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use agent_client_protocol::schema::v1::{SessionUpdate, SessionNotification};
+    use serde_json::json;
+
+    /// Wire shape the agent actually sends for `session/update`: the
+    /// params are a `SessionNotification` envelope carrying `sessionId`
+    /// + `update`. Before the fix this was parsed as a bare
+    /// `SessionUpdate` and silently dropped, so `AgentMessageChunk`
+    /// text never reached consumers.
+    #[test]
+    fn parse_session_update_handles_envelope_shape() {
+        let params = json!({
+            "sessionId": "sess-1",
+            "update": {
+                "sessionUpdate": "agent_message_chunk",
+                "content": { "type": "text", "text": "hello envelope" }
+            }
+        });
+        let update = parse_session_update("session/update", params).expect("envelope should parse");
+        match update {
+            SessionUpdate::AgentMessageChunk(chunk) => match &chunk.content {
+                agent_client_protocol::schema::v1::ContentBlock::Text(t) => {
+                    assert_eq!(t.text, "hello envelope");
+                }
+                other => panic!("expected text content, got {other:?}"),
+            },
+            other => panic!("expected AgentMessageChunk, got {other:?}"),
+        }
+    }
+
+    /// Some future SDK typings may hand us the update without the
+    /// envelope — keep that path working too.
+    #[test]
+    fn parse_session_update_falls_back_to_bare_update() {
+        let params = json!({
+            "sessionUpdate": "agent_message_chunk",
+            "content": { "type": "text", "text": "bare shape" }
+        });
+        let update = parse_session_update("session/update", params).expect("bare should parse");
+        match update {
+            SessionUpdate::AgentMessageChunk(chunk) => match &chunk.content {
+                agent_client_protocol::schema::v1::ContentBlock::Text(t) => {
+                    assert_eq!(t.text, "bare shape");
+                }
+                other => panic!("expected text content, got {other:?}"),
+            },
+            other => panic!("expected AgentMessageChunk, got {other:?}"),
+        }
+    }
+
+    /// Garbage in → `None` out (and a debug-level trace); never panic,
+    /// never silently lose the outer notification.
+    #[test]
+    fn parse_session_update_returns_none_on_unparsable() {
+        let update = parse_session_update("session/update", json!({ "foo": "bar" }));
+        assert!(update.is_none(), "garbage must not parse");
+    }
+
+    /// Sanity-check the envelope struct itself deserializes the way we
+    /// think — guards against SDK renames silently breaking the helper.
+    #[test]
+    fn session_notification_envelope_round_trips() {
+        let raw = json!({
+            "sessionId": "s",
+            "update": {
+                "sessionUpdate": "agent_message_chunk",
+                "content": { "type": "text", "text": "" }
+            }
+        });
+        let env: SessionNotification = serde_json::from_value(raw).unwrap();
+        // `SessionId(pub Arc<str>)` — pull the inner `Arc<str>` and deref.
+        assert_eq!(&*env.session_id.0, "s");
+        assert!(matches!(env.update, SessionUpdate::AgentMessageChunk(_)));
+    }
+}

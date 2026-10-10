@@ -5,6 +5,7 @@ All notable changes to Synapse are documented here.
 ## [Unreleased]
 
 ### Added
+- **ACP client** (feature `acp`) — drive external coding agents (OpenCode, Claude Code via `claude-agent-acp`, Codex via `codex-acp`, …) over stdio via the official `agent-client-protocol` SDK; prompts stream back as `AgentStreamEvent`s
 - **MultiAgent HybridSupervisor** — LLM-driven routing + sub-agent handoff
 - **MultiAgent HandoffSupervisor** — sub-agents decide handoff via `event.action.transfer_to`
 - **MultiAgent OrchestratorAgent** — task decomposition with parallel dispatch
@@ -25,8 +26,11 @@ All notable changes to Synapse are documented here.
 - **Unified Document type** — `document::Document` is canonical, `retriever::Document` is re-export
 - **Unified Document::text()** — convenient constructor with default mime_type
 
+### Fixed
+- **ACP client dropped agent message chunks** — `session/update` notifications were parsed as a bare `SessionUpdate` instead of the `SessionNotification` envelope (`{sessionId, update}`), so `AgentMessageChunk` text never reached consumers; now tries the envelope first and logs unparsable notifications at debug level instead of dropping silently
+
 ### Tests
-- 144 tests passing (no external dependencies, all mocked)
+- 301 tests passing with `--features acp`, 292 default (no external dependencies, all mocked)
 
 ---
 
