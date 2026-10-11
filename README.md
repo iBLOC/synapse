@@ -341,6 +341,18 @@ cargo test --lib lobe               # StatelessSkill + LobeApp
 cargo test --lib transport          # HttpClient trait + native/wasi impls
 ```
 
+## 🚀 可运行示例 / Runnable Examples
+
+```bash
+cargo run --example simple_agent       # 最小 agent / minimal agent
+cargo run --example agent_with_tools   # 自定义 tool / custom tool
+cargo run --example react_agent        # 多轮对话 / multi-turn chat
+cargo run --example rag_pipeline       # RAG 流水线 / RAG pipeline
+```
+
+四个示例都在 `examples/` 下，由 `cargo build --examples` 编译把关；把源码里的 `sk-...` 换成你的 key（或用 `.with_base_url` 指向本地服务）即可运行。
+*All four live under `examples/`, compiled by `cargo build --examples`; replace the `sk-...` placeholder with your key (or point `.with_base_url` at a local server) to run them.*
+
 ---
 
 ## 📦 编译目标 / Build Targets
