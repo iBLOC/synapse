@@ -6,9 +6,9 @@ title: Introduction
 
 **Synapse** is a Rust-based intelligent agent development framework, comparable
 to LangChain and Eino, providing the core building blocks for LLM-powered
-applications: agents, tools, RAG, multi-agent coordination, MCP, A2A, and
-WASM sandboxing.
-*Synapse 是一个基于 Rust 的智能 agent 开发框架，与 LangChain、Eino 同类，为 LLM 应用提供核心构件：agent、tool、RAG、多 agent 协作、MCP、A2A 与 WASM 沙箱。*
+applications: agents, tools, RAG, multi-agent coordination, MCP, A2A, ACP,
+and WASM sandboxing.
+*Synapse 是一个基于 Rust 的智能 agent 开发框架，与 LangChain、Eino 同类，为 LLM 应用提供核心构件：agent、tool、RAG、多 agent 协作、MCP、A2A、ACP 与 WASM 沙箱。*
 
 ## Why Synapse? · 为什么选择 Synapse？
 
@@ -29,6 +29,8 @@ WASM sandboxing.
 
 - **A2A protocol** — First-class cross-process agent communication
   *A2A 协议 —— 一等公民的跨进程 agent 通信*
+- **ACP client** — Drive external coding agents (opencode, claude-code, codex) as normal Synapse streams
+  *ACP 客户端 —— 把外部编码 agent（opencode、claude-code、codex）接成普通的 Synapse 流*
 - **WASM isolation** — Run agents in `wasi` sandboxes (PFC runtime)
   *WASM 隔离 —— agent 跑在 `wasi` 沙箱里（PFC runtime）*
 - **MultiAgent 4-mode coverage** — Router, Orchestrator, Handoff, Hybrid
@@ -53,6 +55,8 @@ Use Synapse when you need:
   *MCP tool 集成（stdio 或 HTTP）*
 - Cross-process agent communication (A2A)
   *跨进程 agent 通信（A2A）*
+- Driving external coding agents (opencode, claude-code-acp, codex-acp) through the Agent Client Protocol
+  *通过 Agent Client Protocol 驱动外部编码 agent（opencode、claude-code-acp、codex-acp）*
 - Deployment to WASM sandboxes for isolation
   *部署到 WASM 沙箱以获得隔离*
 

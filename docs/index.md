@@ -6,7 +6,7 @@ layout: home
 hero:
   name: Synapse
   text: Rust Agent Framework
-  tagline: ReAct · RAG · MultiAgent · MCP · A2A · WASM
+  tagline: ReAct · RAG · MultiAgent · MCP · A2A · ACP · WASM
   actions:
     - theme: brand
       text: Quick Start
@@ -22,8 +22,8 @@ features:
     details: Router, Orchestrator, Handoff, Hybrid. Nested composition. LLM-driven and rule-based.
   - title: 📚 RAG Out of the Box
     details: 4 chunkers (Character/Recursive/Markdown/Token), OpenAI embedding, in-memory vector store.
-  - title: 🔌 MCP + A2A
-    details: Model Context Protocol (stdio + HTTP + Server). Agent-to-Agent protocol. Cross-process.
+  - title: 🔌 MCP + A2A + ACP
+    details: Model Context Protocol (stdio + HTTP + Server). Agent-to-Agent protocol. Agent Client Protocol client (drive opencode / claude-code / codex).
   - title: 📝 Session Event Log
     details: Append-only event persistence. FileEventStore with JSON Lines format.
   - title: 🌊 Waterfall Events
@@ -57,6 +57,8 @@ features:
 
 - **A2A protocol** — First-class cross-process agent communication with persistent task storage
   *A2A 协议 —— 一等公民的跨进程 agent 通信，带持久化 task 存储*
+- **ACP client** — Drive external coding agents (opencode, claude-code, codex) as normal Synapse streams
+  *ACP 客户端 —— 把外部编码 agent（opencode、claude-code、codex）接成普通的 Synapse 流*
 - **WASM isolation** — Run agents in `wasi` sandboxes (PFC runtime)
   *WASM 隔离 —— agent 跑在 `wasi` 沙箱里（PFC runtime）*
 - **MultiAgent 4-mode coverage** — Router, Orchestrator, Handoff, Hybrid

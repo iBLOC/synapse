@@ -24,6 +24,7 @@ abstractions below it.
 ├──────────────────────────────────────────────────────┤
 │  Components                                         │
 │    ├─ Model: OpenAI, Anthropic, custom               │
+│    │    └─ providers::catalog (19 presets)           │
 │    ├─ Tool: BaseTool, InvokableTool, StreamableTool  │
 │    ├─ Document: parser, transformer                 │
 │    │    ├─ CharacterTextSplitter                     │
@@ -31,25 +32,45 @@ abstractions below it.
 │    │    ├─ MarkdownHeaderSplitter                    │
 │    │    └─ TokenTextSplitter                         │
 │    ├─ Embedding: OpenAI                              │
+│    ├─ Audio: AsrProvider / TtsProvider               │
 │    ├─ Indexer: InMemory (and future: pgvector, etc.)│
 │    └─ Retriever: cosine similarity                   │
+├──────────────────────────────────────────────────────┤
+│  lobe (stateless skill lifecycle glue)              │
+│    ├─ StatelessSkill / SkillContext                  │
+│    ├─ ProviderSet (LLM + TTS + ASR + Emotion)        │
+│    └─ LobeApp (register + serve in 10 lines)         │
 ├──────────────────────────────────────────────────────┤
 │  Transport (cross-platform HTTP)                     │
 │    ├─ HttpClient trait                              │
 │    ├─ ReqwestHttpClient (native)                    │
-│    └─ WasiHttpClient (wasip2, for WASM sandbox)     │
+│    ├─ WasiHttpClient (wasip2, for WASM sandbox)     │
+│    └─ transport::ziti (feature "ziti", OpenZiti)     │
 ├──────────────────────────────────────────────────────┤
 │  MCP (Model Context Protocol)                        │
 │    ├─ StdioMcpClient (subprocess + JSON-RPC)         │
-│    └─ HttpMcpClient (HTTP transport)                 │
+│    ├─ HttpMcpClient (HTTP transport)                 │
+│    └─ McpServer (server role — expose Synapse tools) │
 ├──────────────────────────────────────────────────────┤
 │  A2A (Agent-to-Agent)                                │
 │    └─ A2A Adapter (over HttpClient)                  │
+├──────────────────────────────────────────────────────┤
+│  ACP (Agent Client Protocol, feature "acp")          │
+│    ├─ AcpClient (spawn + initialize + dispatch)      │
+│    ├─ AcpAgentSpec (opencode / claude_code / codex)  │
+│    └─ translate (SessionUpdate → AgentStreamEvent)   │
+├──────────────────────────────────────────────────────┤
+│  WASM runtime (package, manager, registry)           │
+│    └─ call_entry: handle(json) → json over linear    │
+│       memory (closes the WASM-A2A sync bridge)       │
 ├──────────────────────────────────────────────────────┤
 │  Schema (shared types)                              │
 │    └─ Message, Content, ToolInfo, ToolCall, etc.     │
 └──────────────────────────────────────────────────────┘
 ```
+
+`acp` and `ziti` are **opt-in feature gates** (`--features acp` / `--features ziti`) — they are not compiled into default builds. `acp` is also non-wasm only.
+*`acp` 和 `ziti` 是**可选 feature 门控**（`--features acp` / `--features ziti`）——默认构建不编译它们。`acp` 还仅在非 wasm 目标可用。*
 
 ## Key Design Principles · 核心设计原则
 
