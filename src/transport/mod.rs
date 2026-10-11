@@ -2,7 +2,7 @@
 //!
 //! ## Overview
 //!
-//! PFC (前额叶) loads agents in WASM sandboxes. WASM agents need to:
+//! Telencephalon (端脑) hosts agents in WASM sandboxes. WASM agents need to:
 //! - Call LLMs (Neuron / OpenAI / Anthropic)
 //! - Make A2A protocol calls
 //!

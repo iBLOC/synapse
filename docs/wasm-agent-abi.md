@@ -1,7 +1,7 @@
 # WASM Agent ABI Reference
 
 > The contract between a Synapse-compiled agent (`my_agent.wasm`)
-> and the supervisor (Prefrontal, or any layer-3 host) that loads
+> and the supervisor (Telencephalon, or any layer-3 host) that loads
 > and runs it. Synapse guarantees compatibility with this ABI
 > across minor (0.x.y) versions; breaking changes require a
 > major version bump.

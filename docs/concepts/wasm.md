@@ -5,8 +5,8 @@ title: WASM Sandbox
 # WASM Sandbox
 
 Synapse is designed to compile to both **native** and **WASM**
-targets, enabling deployment in sandboxed environments (e.g., PFC
-runtime).
+targets, enabling deployment in sandboxed environments (e.g., the
+Telencephalon (端脑) runtime).
 
 ## Cross-Platform Transport
 
@@ -41,14 +41,14 @@ wasi = "0.14"
 pollster = "0.4"
 ```
 
-## Use Case: PFC Runtime
+## Use Case: Telencephalon Runtime
 
-PFC (a sibling project) loads Synapse-compiled agents into a
+Telencephalon (端脑, a sibling project) hosts Synapse-compiled agents in a
 `wasmtime` sandbox:
 
 ```
 ┌─────────────────────────────────────┐
-│  PFC Host                           │
+│  Telencephalon Host                 │
 │   ├─ wasmtime runtime               │
 │   │   └─ Synapse agent (WASM)       │
 │   │        └─ WasiHttpClient        │
@@ -59,7 +59,7 @@ PFC (a sibling project) loads Synapse-compiled agents into a
 ```
 
 The WASM agent has no direct network access. All HTTP goes through
-the PFC host's controlled `wasi::http` implementation.
+the Telencephalon host's controlled `wasi::http` implementation.
 
 ## See Also
 

@@ -41,7 +41,7 @@ Planned future directions for Synapse.
 - [ ] Agent memory management (short-term + long-term)
 - [ ] Multi-modal support (vision, audio)
 - [ ] Distributed agent execution
-- [ ] PFC runtime integration (deploy to PFC)
+- [ ] Telencephalon (端脑) integration (deploy agents to Telencephalon)
 - [ ] Neuron LLM runtime integration
 
 ## Long Term

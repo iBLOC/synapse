@@ -1,11 +1,11 @@
 # WASM Agent ABI 参考
 
 > The contract between a Synapse-compiled agent (`my_agent.wasm`)
-> and the supervisor (Prefrontal, or any layer-3 host) that loads
+> and the supervisor (Telencephalon, or any layer-3 host) that loads
 > and runs it. Synapse guarantees compatibility with this ABI
 > across minor (0.x.y) versions; breaking changes require a
 > major version bump.
-> Synapse 编译出的 agent（`my_agent.wasm`）与加载并运行它的 supervisor（Prefrontal 或任意 layer-3 宿主）之间的契约。Synapse 保证此 ABI 在 minor（0.x.y）版本之间保持兼容；破坏性变更需要 bump major 版本。
+> Synapse 编译出的 agent（`my_agent.wasm`）与加载并运行它的 supervisor（端脑 Telencephalon 或任意 layer-3 宿主）之间的契约。Synapse 保证此 ABI 在 minor（0.x.y）版本之间保持兼容；破坏性变更需要 bump major 版本。
 
 ## ABI 版本
 

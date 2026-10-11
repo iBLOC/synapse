@@ -2,8 +2,8 @@
 
 > Engineering practice guide. Synapse-supervised agents are
 > compiled to a single `.wasm` module per agent and loaded by the
-> supervisor (Prefrontal or any other layer-3 project).
-> 工程实践指南。由 Synapse supervisor 托管的 agent，每个 agent 编译为单个 `.wasm` module，由 supervisor（Prefrontal 或其他 layer-3 项目）加载。
+> supervisor (Telencephalon or any other layer-3 project).
+> 工程实践指南。由 Synapse supervisor 托管的 agent，每个 agent 编译为单个 `.wasm` module，由 supervisor（端脑 Telencephalon 或其他 layer-3 项目）加载。
 
 ## 0. 为什么选 `wasm32-wasip2`？
 
@@ -152,7 +152,7 @@ axum::serve(listener, router).await?;
 
 ## 6. 测试 WASM image
 
-在 supervisor（Prefrontal）可用之前，有三种方式可以驱动 agent：
+在 supervisor（端脑 Telencephalon）可用之前，有三种方式可以驱动 agent：
 
    原生单元测试 —— 通过 mock 宿主 import，让大部分 agent 逻辑以原生方式（`cargo test`）测试。
    直接用 Wasmtime —— 使用 `synapse::wasm::WasmRuntime` 测试 harness（`tests/wasm_runtime_test.rs`），加载 `.wasm` 文件并实际调用导出。

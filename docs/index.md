@@ -33,7 +33,7 @@ features:
   - title: 🏷️ Tool Namespace
     details: Scoped skill registration. MCP-style qualified names (mcp__server__tool).
   - title: 🌐 WASM Sandbox Ready
-    details: Cross-platform HttpClient. Run agents in wasi sandboxes (PFC runtime).
+    details: Cross-platform HttpClient. Run agents in wasi sandboxes (Telencephalon runtime).
   - title: 🛡️ Type-Safe Rust
     details: Async-native, no Python runtime, type-safe agent composition.
 ---
@@ -56,7 +56,7 @@ features:
 
 - **A2A protocol** — First-class cross-process agent communication with persistent task storage
 - **ACP client** — Drive external coding agents (opencode, claude-code, codex) as normal Synapse streams
-- **WASM isolation** — Run agents in `wasi` sandboxes (PFC runtime)
+- **WASM isolation** — Run agents in `wasi` sandboxes (Telencephalon runtime)
 - **MultiAgent 4-mode coverage** — Router, Orchestrator, Handoff, Hybrid
 - **MCP Server** — Build custom MCP servers with `SimpleMcpServer`
 - **Type-safe Rust API** — No Python runtime overhead, async-native
@@ -73,4 +73,4 @@ features:
 
 - **Synapse** (this project) — Agent development toolkit
 - **Neuron** — LLM serving runtime
-- **PFC** — Multi-agent orchestrator + WASM sandbox runtime
+- **Telencephalon** (端脑) — Multi-agent execution runtime: agent registry, A2A gateway, WASM agent host

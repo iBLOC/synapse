@@ -27,7 +27,7 @@ and WASM sandboxing.
 
 - **A2A protocol** — First-class cross-process agent communication
 - **ACP client** — Drive external coding agents (opencode, claude-code, codex) as normal Synapse streams
-- **WASM isolation** — Run agents in `wasi` sandboxes (PFC runtime)
+- **WASM isolation** — Run agents in `wasi` sandboxes (Telencephalon runtime)
 - **MultiAgent 4-mode coverage** — Router, Orchestrator, Handoff, Hybrid
 - **Type-safe Rust API** — No Python runtime overhead, async-native
 - **292 tests** — Comprehensive unit + integration coverage, all mocked
@@ -63,4 +63,4 @@ Use Synapse when you need:
 
 - **Synapse** (this project) — Agent development toolkit
 - **Neuron** — LLM serving runtime
-- **PFC** — Multi-agent orchestrator + WASM sandbox runtime
+- **Telencephalon** (端脑) — Multi-agent execution runtime: agent registry, A2A gateway, WASM agent host

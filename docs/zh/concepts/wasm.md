@@ -4,7 +4,7 @@ title: WASM Sandbox
 
 # WASM 沙箱
 
-Synapse 设计为可同时编译到 **native** 与 **WASM** 目标，从而能部署进沙箱环境（例如 PFC runtime）。
+Synapse 设计为可同时编译到 **native** 与 **WASM** 目标，从而能部署进沙箱环境（例如端脑 Telencephalon runtime）。
 
 ## 跨平台 Transport
 
@@ -39,13 +39,13 @@ wasi = "0.14"
 pollster = "0.4"
 ```
 
-## 使用场景：PFC Runtime
+## 使用场景：端脑（Telencephalon）Runtime
 
-PFC（姊妹项目）把编译成 WASM 的 Synapse agent 加载进 `wasmtime` 沙箱：
+端脑（Telencephalon，姊妹项目）把编译成 WASM 的 Synapse agent 托管进 `wasmtime` 沙箱：
 
 ```
 ┌─────────────────────────────────────┐
-│  PFC Host                           │
+│  Telencephalon Host                 │
 │   ├─ wasmtime runtime               │
 │   │   └─ Synapse agent (WASM)       │
 │   │        └─ WasiHttpClient        │
@@ -55,6 +55,6 @@ PFC（姊妹项目）把编译成 WASM 的 Synapse agent 加载进 `wasmtime` �
 └─────────────────────────────────────┘
 ```
 
-WASM agent 没有直接的网络访问。所有 HTTP 都经由 PFC host 受控的 `wasi::http` 实现。
+WASM agent 没有直接的网络访问。所有 HTTP 都经由端脑（Telencephalon）host 受控的 `wasi::http` 实现。
 
 ## 相关阅读

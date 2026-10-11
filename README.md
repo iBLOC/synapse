@@ -41,7 +41,7 @@
 > 其他框架没有的 / Things other frameworks don't have.
 
 - **A2A 协议 / A2A protocol** — 通过官方 `a2a-rs` SDK 实现标准 A2A v1.0 (跨进程 agent 通信, JSON-RPC over SSE) / Cross-process agent communication via the official a2a-rs SDK.
-- **WASM 隔离 / WASM sandboxing** — `WasiHttpClient` 让 agent 在 PFC WASM 沙箱中运行，HTTP 走 wasi::http（不依赖 native reqwest）/ Agents run inside a PFC WASM sandbox; HTTP goes through `wasi::http` (no native reqwest dependency).
+- **WASM 隔离 / WASM sandboxing** — `WasiHttpClient` 让 agent 在端脑（Telencephalon）WASM 沙箱中运行，HTTP 走 wasi::http（不依赖 native reqwest）/ Agents run inside a Telencephalon (端脑) WASM sandbox; HTTP goes through `wasi::http` (no native reqwest dependency).
 - **End-to-end streaming** — `AgentStreamEvent` 单总线, 贯穿 LLM provider → agent → multi-agent → A2A wire / Single bus from LLM provider through agent, multi-agent, and A2A wire.
 - **WASM agent ABI v1** — `synapse_abi_version=1` 稳定 ABI, 编译为 `wasm32-wasip2` 即可被任意 supervisor 加载 / Stable ABI; compile to `wasm32-wasip2` and any supervisor can load it.
 - **MultiAgent 4 模式全覆盖 / 4-mode coverage** — Router（LLM 路由 / LLM routing）、Orchestrator（分解并行 / decompose + parallel）、Handoff（对话切换 / conversation transfer）、Hybrid（路由 + handoff 组合 / router + handoff composite）.

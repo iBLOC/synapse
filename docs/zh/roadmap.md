@@ -35,7 +35,7 @@ Synapse 的未来规划方向。
   - Agent 记忆管理（短期 + 长期）
   - 多模态支持（视觉、音频）
   - 分布式 agent 执行
-  - PFC runtime 集成（部署到 PFC）
+  - 端脑（Telencephalon）集成（把 agent 部署到端脑）
   - Neuron LLM runtime 集成
 
 ## 长期

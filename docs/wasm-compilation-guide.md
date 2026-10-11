@@ -2,7 +2,7 @@
 
 > Engineering practice guide. Synapse-supervised agents are
 > compiled to a single `.wasm` module per agent and loaded by the
-> supervisor (Prefrontal or any other layer-3 project).
+> supervisor (Telencephalon or any other layer-3 project).
 
 ## 0. Why `wasm32-wasip2`?
 
@@ -167,7 +167,7 @@ axum::serve(listener, router).await?;
 
 ## 6. Testing the WASM image
 
-Until the supervisor (Prefrontal) is available, agents can be
+Until the supervisor (Telencephalon) is available, agents can be
 exercised in three ways:
 
 1. **Native unit tests** — keep most agent logic tested natively
