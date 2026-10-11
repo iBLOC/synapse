@@ -2,11 +2,12 @@
 title: Model Providers
 ---
 
-# Model Providers
+# Model Providers · 模型 Provider
 
 Synapse provides a unified interface for LLM providers via the `LLMProvider` trait.
+*Synapse 通过 `LLMProvider` trait 为 LLM provider 提供统一接口。*
 
-## LLMProvider Trait
+## LLMProvider Trait · LLM Provider trait
 
 ```rust
 #[async_trait]
@@ -20,15 +21,15 @@ pub trait LLMProvider: Send + Sync {
 }
 ```
 
-## Built-in Providers
+## Built-in Providers · 内置 Provider
 
-| Provider | Class | Env Var |
+| Provider / 提供方 | Class / 实现类 | Env Var / 环境变量 |
 |----------|-------|---------|
 | OpenAI | `OpenAIProvider` | `OPENAI_API_KEY` |
 | Anthropic | `AnthropicProvider` | `ANTHROPIC_API_KEY` |
 | Azure OpenAI | `AzureProvider` | `AZURE_OPENAI_API_KEY` |
 
-## Quick Start
+## Quick Start · 快速开始
 
 ```rust
 use synapse::providers::openai::OpenAIProvider;
@@ -45,9 +46,10 @@ let response = provider.chat(messages, ChatOptions::default()).await?;
 println!("{}", response.content.text.unwrap_or_default());
 ```
 
-## ProviderRegistry
+## ProviderRegistry · Provider 注册表
 
 Manage multiple providers with a central registry:
+*用中央注册表管理多个 provider：*
 
 ```rust
 use synapse::providers::ProviderRegistry;
@@ -63,7 +65,7 @@ let response = provider.chat(messages, options).await?;
 let anthropic = registry.get("anthropic").unwrap();
 ```
 
-### From Configuration
+### From Configuration · 从配置构建
 
 ```rust
 use synapse::providers::{ProviderConfig, ProviderRegistry};
@@ -86,7 +88,7 @@ let configs = vec![
 let registry = ProviderRegistry::from_config(configs)?;
 ```
 
-## Custom Provider
+## Custom Provider · 自定义 Provider
 
 ```rust
 use async_trait::async_trait;
@@ -116,18 +118,18 @@ impl LLMProvider for MyLocalModel {
 }
 ```
 
-## Configuration via Environment Variables
+## Configuration via Environment Variables · 通过环境变量配置
 
-| Variable | Provider | Description |
+| Variable / 变量 | Provider / 提供方 | Description / 说明 |
 |----------|----------|-------------|
-| `OPENAI_API_KEY` | OpenAI | API key |
-| `OPENAI_API_BASE` | OpenAI | Custom base URL (for Ollama, etc.) |
-| `OPENAI_MODEL` | OpenAI | Default model |
-| `ANTHROPIC_API_KEY` | Anthropic | API key |
-| `ANTHROPIC_BASE_URL` | Anthropic | Custom base URL |
-| `ANTHROPIC_MODEL` | Anthropic | Default model |
+| `OPENAI_API_KEY` | OpenAI | API key / API 密钥 |
+| `OPENAI_API_BASE` | OpenAI | Custom base URL (for Ollama, etc.) / 自定义 base URL（用于 Ollama 等） |
+| `OPENAI_MODEL` | OpenAI | Default model / 默认 model |
+| `ANTHROPIC_API_KEY` | Anthropic | API key / API 密钥 |
+| `ANTHROPIC_BASE_URL` | Anthropic | Custom base URL / 自定义 base URL |
+| `ANTHROPIC_MODEL` | Anthropic | Default model / 默认 model |
 
-## See Also
+## See Also · 相关阅读
 
 - [Agent Trait](/reference/agent-trait) — Using providers in agents
 - [RAG Pipeline](/howto/rag-pipeline) — Using embeddings

@@ -2,23 +2,24 @@
 title: Waterfall Events
 ---
 
-# Waterfall Events
+# Waterfall Events · Waterfall 事件
 
 Interceptor-pattern event system with 5 dispatch modes, inspired by Cordis.
+*拦截器（interceptor）模式的事件系统，提供 5 种分发模式，灵感来自 Cordis。*
 
-## Dispatch Modes
+## Dispatch Modes · 分发模式
 
-| Mode | Behavior | Use Case |
+| Mode / 模式 | Behavior / 行为 | Use Case / 使用场景 |
 |------|----------|----------|
-| `emit` | Concurrent, ignore returns | Fire-and-forget notifications |
-| `parallel` | Concurrent, await all | Independent side effects |
-| `serial` | Sequential, await each | Ordered processing |
-| `bail` | Stop on first non-null | Early termination |
-| `waterfall` | Chain with `next()` | LLM request interceptors |
+| `emit` | Concurrent, ignore returns / 并发执行，忽略返回值 | Fire-and-forget notifications / 即发即忘的通知 |
+| `parallel` | Concurrent, await all / 并发执行，await 全部完成 | Independent side effects / 互不依赖的副作用 |
+| `serial` | Sequential, await each / 顺序执行，逐个 await | Ordered processing / 有序处理 |
+| `bail` | Stop on first non-null / 遇到首个非空即停止 | Early termination / 提前终止 |
+| `waterfall` | Chain with `next()` / 通过 `next()` 链式传递 | LLM request interceptors / LLM 请求拦截器 |
 
-## Usage
+## Usage · 用法
 
-### Basic Waterfall
+### Basic Waterfall · 基本 Waterfall
 
 ```rust
 use synapse::events::*;
@@ -45,7 +46,7 @@ let bus = EventBus::new();
 bus.on_waterfall("llm/stream", Arc::new(RetryListener), 10);
 ```
 
-### Multiple Listeners
+### Multiple Listeners · 多个 Listener
 
 ```rust
 // Higher priority runs first
@@ -57,7 +58,7 @@ let event = EventData::new("request", serde_json::json!({}));
 bus.dispatch_waterfall("request", event).await?;
 ```
 
-### Dispatch
+### Dispatch · 分发
 
 ```rust
 // Waterfall (chain with next)

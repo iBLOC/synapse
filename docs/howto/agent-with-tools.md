@@ -2,15 +2,17 @@
 title: Add Tools to an Agent
 ---
 
-# Add Tools to an Agent
+# Add Tools to an Agent · 给 Agent 添加工具
 
 Enable your agent to perform actions (search, calculate, fetch data).
+*让你的 agent 能够执行动作（搜索、计算、获取数据）。*
 
-## Goal
+## Goal · 目标
 
 Build an agent with a `Calculator` tool that the LLM can call.
+*构建一个带 `Calculator` tool 的 agent，供 LLM 调用。*
 
-## Step 1: Define the Tool
+## Step 1: Define the Tool · 第 1 步：定义 Tool
 
 ```rust
 use std::sync::Arc;
@@ -48,7 +50,7 @@ impl InvokableTool for Calculator {
 }
 ```
 
-## Step 2: Build the Agent
+## Step 2: Build the Agent · 第 2 步：构建 Agent
 
 ```rust
 let model = Arc::new(OpenAIModel::new("gpt-4", "sk-..."));
@@ -62,7 +64,7 @@ let agent = GraphReActAgent::builder()
     .build()?;
 ```
 
-## Step 3: Test
+## Step 3: Test · 第 3 步：测试
 
 ```rust
 let input = AgentInput {
@@ -77,7 +79,7 @@ let event = agent.run(input).await?;
 // 4. Return "5 + 3 = 8"
 ```
 
-## Adding Multiple Tools
+## Adding Multiple Tools · 添加多个 Tools
 
 ```rust
 let agent = GraphReActAgent::builder()
@@ -89,6 +91,7 @@ let agent = GraphReActAgent::builder()
 ```
 
 The LLM picks which tool to call based on the user's question.
+*LLM 根据用户的问题自行决定调用哪个 tool。*
 
 ## Next Steps
 

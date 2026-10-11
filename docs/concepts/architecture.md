@@ -2,12 +2,13 @@
 title: Architecture
 ---
 
-# Architecture
+# Architecture · 架构
 
 Synapse is organized as layered modules. Each layer builds on the
 abstractions below it.
+*Synapse 按分层模块组织，每一层都构建在其下层的抽象之上。*
 
-## Layer Overview
+## Layer Overview · 分层总览
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -50,15 +51,20 @@ abstractions below it.
 └──────────────────────────────────────────────────────┘
 ```
 
-## Key Design Principles
+## Key Design Principles · 核心设计原则
 
 1. **Trait-based composition** — Every major abstraction is a trait, allowing users to plug in custom implementations.
+   ***基于 trait 的组合** —— 每个主要抽象都是 trait，用户可以插入自定义实现。*
 2. **Async by default** — All I/O is `async`, using `async_trait` for object safety.
+   ***默认异步** —— 所有 I/O 都是 `async`，用 `async_trait` 保证对象安全。*
 3. **Cross-platform** — Same code runs natively and in WASM via conditional `cfg(target_arch)` dependencies.
+   ***跨平台** —— 同一份代码通过条件依赖 `cfg(target_arch)` 既可原生运行，也可在 WASM 中运行。*
 4. **Reuse run loops** — The ReAct loop in `ChatModelAgent` is reused by RouterSupervisor (tool calls as routing), avoiding duplicated orchestration logic.
+   ***复用 run loop** —— `ChatModelAgent` 的 ReAct 循环被 RouterSupervisor 复用（tool call 即路由），避免编排逻辑重复实现。*
 5. **No magic** — Each layer's behavior is explicit and traceable.
+   ***无魔法** —— 每一层的行为都显式且可追溯。*
 
-## Data Flow Example: A ReAct Agent
+## Data Flow Example: A ReAct Agent · 数据流示例：ReAct Agent
 
 ```
 User Input (Vec<Message>)
@@ -91,15 +97,17 @@ User Input (Vec<Message>)
 Final AgentEvent { output.message, output.action, error? }
 ```
 
-## MultiAgent Coordination
+## MultiAgent Coordination · MultiAgent 协调
 
 Each MultiAgent pattern has a distinct coordination signal:
+*每种 MultiAgent 模式都有各自不同的协调信号：*
 
-| Pattern | Coordinator | Signal | Who Decides |
+| Pattern / 模式 | Coordinator / 协调者 | Signal / 信号 | Who Decides / 决策者 |
 |---------|-------------|--------|-------------|
-| Router/Supervisor | LLM (host) | `tool_call` | Top-level LLM |
-| Host/Orchestrator | LLM (host) | `tool_call` (parallel) | Top-level LLM |
-| Conversational Handoff | None (rule-based) | `event.action.transfer_to` | Sub-agent |
-| Hybrid | LLM + handoff | both | LLM picks, sub-agents can transfer |
+| Router/Supervisor / 路由式 | LLM (host) / LLM（host） | `tool_call` | Top-level LLM / 顶层 LLM |
+| Host/Orchestrator / 编排式 | LLM (host) / LLM（host） | `tool_call` (parallel) / `tool_call`（并行） | Top-level LLM / 顶层 LLM |
+| Conversational Handoff / 对话式 Handoff | None (rule-based) / 无（基于规则） | `event.action.transfer_to` | Sub-agent / sub-agent |
+| Hybrid / 混合式 | LLM + handoff / LLM + handoff | both / 两者 | LLM picks, sub-agents can transfer / LLM 选定，sub-agent 可移交 |
 
 See [MultiAgent Concepts](/concepts/multiagent) for details.
+*详见 [MultiAgent Concepts](/concepts/multiagent) 文档。*

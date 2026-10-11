@@ -266,6 +266,8 @@ let mp3 = tts.synthesize("你好", "mp3").await?;
 
 ## Documentation / 文档索引
 
+All docs-site content pages (`docs/index.md`, `guide/`, `concepts/`, `howto/`, `reference/`, `comparison.md`, `roadmap.md`, `wasm-*.md`) are **bilingual 中文+English**, following the `docs/concepts/acp.md` convention: English prose paragraph followed by its italic Chinese translation, headings as `English · 中文`, tables as `English / 中文`; code blocks and identifiers stay untranslated. Excluded (English-only by design): `docs/CHANGELOG.md` (release log, high churn), `docs/SECURITY.md` / `docs/CONTRIBUTING.md` (1-line stubs pointing at root). New doc pages must follow the same convention.
+
 Concept docs under `docs/concepts/` are the deep-dive for each major module. Concept 文档在 `docs/concepts/` 下，每个核心模块一份：
 
 - [`docs/concepts/a2a.md`](docs/concepts/a2a.md) — A2A protocol (client + server + TaskStore trait) / A2A 协议（client + server + TaskStore trait）

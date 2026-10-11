@@ -2,11 +2,12 @@
 title: BaseChatModel
 ---
 
-# BaseChatModel
+# BaseChatModel · 基础 Chat Model
 
 LLM provider abstraction.
+*LLM provider 抽象。*
 
-## Definition
+## Definition · 定义
 
 ```rust
 #[async_trait]
@@ -25,7 +26,7 @@ pub trait BaseChatModel: Send + Sync {
 }
 ```
 
-## Options
+## Options · 选项
 
 ```rust
 pub struct GenerateOptions {
@@ -53,12 +54,15 @@ pub enum ModelError {
 }
 ```
 
-## Implementations
+## Implementations · 实现
 
 - `OpenAIModel` — OpenAI API
+  *`OpenAIModel` —— OpenAI API*
 - `OpenAIChatModel` — Lower-level OpenAI
+  *`OpenAIChatModel` —— 更底层的 OpenAI*
 - `AnthropicClient` — Anthropic Claude
+  *`AnthropicClient` —— Anthropic Claude*
 
-## See Also
+## See Also · 相关阅读
 
 - [Model concepts](/concepts/model)

@@ -2,19 +2,24 @@
 title: Tool Namespace
 ---
 
-# Tool Namespace
+# Tool Namespace · 工具命名空间
 
 Scoped skill registration with qualified names, inspired by MCP tool naming.
+*用限定名（qualified name）实现带作用域的 skill 注册，灵感来自 MCP 的工具命名。*
 
-## Overview
+## Overview · 概述
 
 The namespace system allows organizing skills into isolated groups with qualified names:
+*命名空间系统允许用限定名把 skill 组织进相互隔离的分组：*
+
 - `mcp__github__search` — namespace=mcp, skill=github__search
+  *`mcp__github__search` —— namespace=mcp，skill=github__search*
 - `web__fetch` — namespace=web, skill=fetch
+  *`web__fetch` —— namespace=web，skill=fetch*
 
-## Usage
+## Usage · 用法
 
-### Basic Setup
+### Basic Setup · 基本设置
 
 ```rust
 use synapse::skills::ScopedSkillRouter;
@@ -30,7 +35,7 @@ router.register_skill("mcp", Arc::new(github_skill))?;
 router.register_skill("web", Arc::new(fetch_skill))?;
 ```
 
-### Dispatch
+### Dispatch · 分发
 
 ```rust
 // By qualified name
@@ -41,7 +46,7 @@ let all = router.list_all_skills();
 // ["mcp__github__search", "web__fetch", ...]
 ```
 
-### Namespace Operations
+### Namespace Operations · 命名空间操作
 
 ```rust
 // List namespaces
@@ -54,7 +59,7 @@ let skills = router.list_skills("mcp")?;
 let skill = router.get_skill("mcp__github__search");
 ```
 
-## Naming Convention
+## Naming Convention · 命名约定
 
 ```
 <namespace>__<skill_name>
@@ -63,10 +68,13 @@ let skill = router.get_skill("mcp__github__search");
 ```
 
 - Double underscore (`__`) separates namespace from skill
+  *双下划线（`__`）分隔 namespace 与 skill*
 - Skill names can contain additional underscores
+  *skill 名中还可以包含额外的下划线*
 - Example: `mcp__github__search_pr` is valid
+  *例如 `mcp__github__search_pr` 是合法的*
 
-## Integration with MCP
+## Integration with MCP · 与 MCP 集成
 
 ```rust
 // Register MCP server tools
