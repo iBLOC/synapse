@@ -6,8 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "vitepress dev",
-    "build": "vitepress build",
-    "build:pages": "node ./scripts/write-base.mjs && vitepress build",
+    "build": "vitepress build && node ./scripts/postbuild.mjs",
+    "build:pages": "node ./scripts/write-base.mjs && vitepress build && node ./scripts/postbuild.mjs",
     "preview": "vitepress preview"
   },
   "devDependencies": {

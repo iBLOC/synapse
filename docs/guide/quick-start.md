@@ -2,15 +2,13 @@
 title: Quick Start
 ---
 
-# Quick Start · 快速开始
+# Quick Start
 
 Get up and running with Synapse in 5 minutes.
-*5 分钟让 Synapse 跑起来。*
 
-## Installation · 安装
+## Installation
 
 Add Synapse to your `Cargo.toml`:
-*把 Synapse 加进 `Cargo.toml`：*
 
 ```toml
 [dependencies]
@@ -18,7 +16,7 @@ synapse = "0.1"
 tokio = { version = "1", features = ["full"] }
 ```
 
-## Your First Agent · 你的第一个 Agent
+## Your First Agent
 
 ```rust
 use std::sync::Arc;
@@ -53,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## Add a Tool · 添加 Tool
+## Add a Tool
 
 ```rust
 use std::sync::Arc;
@@ -98,20 +96,16 @@ let agent = GraphReActAgent::builder()
     .build()?;
 ```
 
-## Run Tests · 运行测试
+## Run Tests
 
 ```bash
 cargo test
 ```
 
 All 205 tests run without external dependencies.
-*全部 205 个测试无需任何外部依赖即可运行。*
 
-## Next Steps · 下一步
+## Next Steps
 
 - [Build a Simple Agent](/howto/simple-agent) — Detailed walkthrough
-  *详细分步讲解*
 - [Architecture](/concepts/architecture) — Understand the framework
-  *理解框架架构*
 - [Concepts](/concepts/agent) — Deep dive on each abstraction
-  *深入理解每个抽象*

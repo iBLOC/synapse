@@ -2,35 +2,30 @@
 title: MCP (Model Context Protocol)
 ---
 
-# MCP (Model Context Protocol) · 模型上下文协议
+# MCP (Model Context Protocol)
 
 MCP is a standard protocol for connecting LLMs to tools and data sources.
 Synapse implements both MCP client and server.
-*MCP 是连接 LLM 与工具、数据源的标准协议。Synapse 同时实现了 MCP client 与 server。*
 
-## What is MCP? · 什么是 MCP？
+## What is MCP?
 
 MCP defines a JSON-RPC based protocol where:
-*MCP 定义了一套基于 JSON-RPC 的协议：*
 
 - **Server** exposes tools, resources, prompts
-  *Server 端暴露 tools、resources、prompts*
 - **Client** invokes them, gets results
-  *Client 端调用它们并获取结果*
 
-## Transports · 传输方式
+## Transports
 
-| Transport / 传输 | Use Case / 适用场景 | Class / 实现类 |
+| Transport | Use Case | Class |
 |-----------|----------|-------|
-| **stdio** | Local subprocess (Python, Node, etc.) / 本地子进程（Python、Node 等） | `StdioMcpClient` |
-| **HTTP** | Remote MCP server / 远程 MCP server | `HttpMcpClient` |
+| **stdio** | Local subprocess (Python, Node, etc.) | `StdioMcpClient` |
+| **HTTP** | Remote MCP server | `HttpMcpClient` |
 
 Both implement the same `initialize / list_tools / call_tool` API.
-*两者实现同一套 `initialize / list_tools / call_tool` API。*
 
-## MCP Client · MCP 客户端
+## MCP Client
 
-### StdioMcpClient · Stdio 客户端
+### StdioMcpClient
 
 ```rust
 use synapse::mcp::StdioMcpClient;
@@ -41,7 +36,7 @@ let tools = client.list_tools().await?;
 let result = client.call_tool("echo", serde_json::json!({"text": "hi"})).await?;
 ```
 
-### HttpMcpClient · HTTP 客户端
+### HttpMcpClient
 
 ```rust
 use std::sync::Arc;
@@ -54,12 +49,11 @@ client.initialize().await?;
 let tools = client.list_tools().await?;
 ```
 
-## MCP Server · MCP 服务端
+## MCP Server
 
 Synapse provides a trait-based MCP server abstraction:
-*Synapse 提供基于 trait 的 MCP server 抽象：*
 
-### McpServer Trait · MCP 服务器 trait
+### McpServer Trait
 
 ```rust
 use synapse::mcp::McpServer;
@@ -74,10 +68,9 @@ impl McpServer for MyServer {
 }
 ```
 
-### SimpleMcpServer · 简易 MCP 服务器
+### SimpleMcpServer
 
 Build an MCP server with handler functions:
-*用 handler 函数构建 MCP 服务器：*
 
 ```rust
 use synapse::mcp::{SimpleMcpServer, ToolHandler};
@@ -102,10 +95,9 @@ let tools = server.list_tools().await?;
 let result = server.call_tool("echo", serde_json::json!({"input": "hello"})).await?;
 ```
 
-## Using MCP Tools in Synapse Agents · 在 Synapse Agent 中使用 MCP 工具
+## Using MCP Tools in Synapse Agents
 
 Wrap MCP tools as Synapse `InvokableTool` with `McpToolAdapter`:
-*用 `McpToolAdapter` 把 MCP 工具包装成 Synapse 的 `InvokableTool`：*
 
 ```rust
 use std::sync::Arc;
@@ -119,6 +111,6 @@ let mcp_tools: Vec<Arc<McpToolAdapter>> = tools.into_iter()
     .collect();
 ```
 
-## See Also · 相关阅读
+## See Also
 
 - [MCP Server how-to](/howto/mcp-server)

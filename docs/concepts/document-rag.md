@@ -2,14 +2,13 @@
 title: Document & RAG
 ---
 
-# Document & RAG · 文档与 RAG
+# Document & RAG
 
 Retrieval-Augmented Generation (RAG) is a common pattern: given a user
 query, retrieve relevant documents from a knowledge base, and use them
 as context for the LLM to generate a grounded answer.
-*检索增强生成（RAG）是一种常见模式：给定用户 query，从知识库中检索相关文档，再将其作为 context 交给 LLM，生成有依据的回答。*
 
-## Pipeline · 流水线
+## Pipeline
 
 ```
 Raw bytes (PDF, HTML, text)
@@ -29,10 +28,9 @@ Wrap as Document (id, content, mime_type, metadata)
 Use as context for LLM
 ```
 
-## Document Type · 文档类型
+## Document Type
 
 Unified document type:
-*统一的文档类型：*
 
 ```rust
 pub struct Document {
@@ -51,7 +49,7 @@ impl Document {
 }
 ```
 
-## Parsers · 解析器
+## Parsers
 
 ```rust
 pub trait DocumentParser: Send + Sync {
@@ -62,11 +60,10 @@ pub trait DocumentParser: Send + Sync {
 ```
 
 Built-in:
-*内置实现：*
 - `TextParser` — text/plain, text/markdown, text/html
 - `JsonParser` — application/json
 
-## Chunking (DocumentTransformer) · 分块（DocumentTransformer）
+## Chunking (DocumentTransformer)
 
 ```rust
 #[async_trait]
@@ -78,27 +75,21 @@ pub trait DocumentTransformer: Send + Sync {
 ```
 
 Built-in splitters:
-*内置 splitter：*
 
-| Splitter / 分块器 | Behavior / 行为 |
+| Splitter | Behavior |
 |----------|----------|
-| `CharacterTextSplitter` | Fixed char count with overlap / 固定字符数 + 重叠 |
-| `RecursiveCharacterTextSplitter` | Recursive separator (`\n\n` → `\n` → ` `) / 递归分隔符（`\n\n` → `\n` → 空格） |
-| `MarkdownHeaderSplitter` | By markdown headers (h1/h2/h3) / 按 markdown 标题（h1/h2/h3） |
-| `TokenTextSplitter` | By approximate token count / 按近似 token 数 |
+| `CharacterTextSplitter` | Fixed char count with overlap |
+| `RecursiveCharacterTextSplitter` | Recursive separator (`\n\n` → `\n` → ` `) |
+| `MarkdownHeaderSplitter` | By markdown headers (h1/h2/h3) |
+| `TokenTextSplitter` | By approximate token count |
 
 Each chunk carries:
-*每个 chunk 携带：*
 - `source_id` — original document ID
-  *`source_id` —— 源文档 ID*
 - `chunk_index` — sequence in source
-  *`chunk_index` —— 在源文档中的序号*
 - `mime_type` — inherited from source
-  *`mime_type` —— 继承自源文档*
 - Original metadata preserved
-  *原始 metadata 保留*
 
-## Embedding · Embedding（嵌入）
+## Embedding
 
 ```rust
 #[async_trait]
@@ -109,7 +100,7 @@ pub trait Embedding: Send + Sync {
 }
 ```
 
-## VectorStore + Indexer · 向量存储与索引
+## VectorStore + Indexer
 
 ```rust
 pub trait Indexer: Send + Sync {
@@ -120,7 +111,7 @@ pub trait Indexer: Send + Sync {
 }
 ```
 
-## Retriever · 检索器
+## Retriever
 
 ```rust
 pub trait Retriever: Send + Sync {
@@ -134,7 +125,7 @@ pub struct RetrieveOptions {
 }
 ```
 
-## Full RAG Example · 完整 RAG 示例
+## Full RAG Example
 
 ```rust
 use std::sync::Arc;
@@ -169,4 +160,3 @@ let results = retriever
 ```
 
 See [RAG Pipeline how-to](/howto/rag-pipeline) for a full walkthrough.
-*完整流程见 [RAG Pipeline how-to](/howto/rag-pipeline) 文档。*

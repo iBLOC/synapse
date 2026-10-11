@@ -2,19 +2,17 @@
 title: Connect to MCP Server
 ---
 
-# Connect to MCP Server · 连接 MCP Server
+# Connect to MCP Server
 
 Use external MCP tools (from any MCP-compatible server) in your
 Synapse agents.
-*在你的 Synapse agent 中使用外部 MCP tools（来自任何兼容 MCP 的 server）。*
 
-## Goal · 目标
+## Goal
 
 Connect to an MCP server (Python, Node, or any other implementation),
 list its tools, and use them in a Synapse agent.
-*连接一个 MCP server（Python、Node 或任何其他实现），列出它的 tools，并在 Synapse agent 中使用它们。*
 
-## Stdio Transport (Local Subprocess) · Stdio Transport（本地子进程）
+## Stdio Transport (Local Subprocess)
 
 ```rust
 use std::sync::Arc;
@@ -58,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## HTTP Transport (Remote Server) · HTTP Transport（远程服务器）
+## HTTP Transport (Remote Server)
 
 ```rust
 use std::sync::Arc;
@@ -73,10 +71,9 @@ client.initialize().await?;
 let tools = client.list_tools().await?;
 ```
 
-## Writing a Mock MCP Server (for Testing) · 编写用于测试的 Mock MCP Server
+## Writing a Mock MCP Server (for Testing)
 
 A minimal Python MCP server:
-*一个最小化的 Python MCP server：*
 
 ```python
 import sys

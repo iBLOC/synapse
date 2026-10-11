@@ -1,6 +1,6 @@
 # Synapse — 神经突触层 (Shared Foundation Library)
 
-**Updated**: 2026-09-26 (added `synapse::acp` client module — drives external ACP-speaking agents via the official `agent-client-protocol` 2.2 SDK); 2026-09-25 (`transport::ziti` per `8ff2294` (2026-09-09), audio providers per `cdb6249` (2026-08-22); A2A metadata wire-forwarding via `__encephalon_meta_v1__` per `135f1fd`; WASM-A2A bridge sync path; zero-warnings pass prior baseline 2026-07-19)
+**Updated**: 2026-10-11 (two-locale docs site EN root + `docs/zh/`, copy-as-Markdown + `llms.txt` via postbuild, `examples/` runnable samples; `synapse::acp` client module — drives external ACP agents via the official `agent-client-protocol` 2.2 SDK per `1429a95`); 2026-09-25 (`transport::ziti` per `8ff2294` (2026-09-09), audio providers per `cdb6249` (2026-08-22); A2A metadata wire-forwarding via `__encephalon_meta_v1__` per `135f1fd`; WASM-A2A bridge sync path; zero-warnings pass prior baseline 2026-07-19)
 **Status**: ✅ v0.4 lobe module complete + WASM-A2A sync bridge + A2A metadata round-trip via `__encephalon_meta_v1__` + `transport::ziti` zero-trust A2A over OpenZiti + `acp` client driving external ACP agents (opencode / claude-code-acp / codex-acp)
 
 ## Role
@@ -266,7 +266,11 @@ let mp3 = tts.synthesize("你好", "mp3").await?;
 
 ## Documentation / 文档索引
 
-All docs-site content pages (`docs/index.md`, `guide/`, `concepts/`, `howto/`, `reference/`, `comparison.md`, `roadmap.md`, `wasm-*.md`) are **bilingual 中文+English**, following the `docs/concepts/acp.md` convention: English prose paragraph followed by its italic Chinese translation, headings as `English · 中文`, tables as `English / 中文`; code blocks and identifiers stay untranslated. Excluded (English-only by design): `docs/CHANGELOG.md` (release log, high churn), `docs/SECURITY.md` / `docs/CONTRIBUTING.md` (1-line stubs pointing at root). New doc pages must follow the same convention.
+The docs site is a **two-locale VitePress tree**: English pages at the site root, 简体中文 pages under `docs/zh/` mirroring the same paths. VitePress `locales` in `docs/.vitepress/config.ts` renders the navbar language switcher; nav/sidebar labels are translated per locale. Content pages exist in BOTH trees — when you add or change a page under `docs/guide|concepts|howto|reference/` or `docs/index.md`, write the Chinese counterpart under `docs/zh/<same-path>` in the same change. Code blocks, identifiers and `/api/*` (rustdoc) links are shared and stay untranslated; internal site links in `zh/` pages are prefixed with `/zh`. Excluded from translation (stay English-only / root-only): `docs/CHANGELOG.md` (release log, high churn), `docs/SECURITY.md` / `docs/CONTRIBUTING.md` (1-line stubs), the legacy Chinese-primary guide pages (`framework-alignment`, `lcel-pipe`, `memory`, `observability`, `opentelemetry-*`, `structured-output`, `typed-lambda`) and `docs/superpowers/` (internal specs, not in nav).
+
+**AI-friendliness is a build feature**: `docs/scripts/postbuild.mjs` (chained into `npm run build` / `build:pages`) copies every source `.md` into `dist/` at its original path (stable raw-markdown URLs — `https://ibloc.github.io/synapse/<path>.md`), and generates `llms.txt` (curated index) + `llms-full.txt` (full corpus) at the site root. The theme adds a "Copy page as Markdown" button under every page (`docs/.vitepress/theme/components/DocActions.vue`). Keep that script in the build chain when touching `docs/package.json`.
+
+**Runnable examples** live in `examples/*.rs` at the repo root and are compiled by `cargo build --examples` — they are the executable source of truth for how to call the public API. When a how-to page's code block and an example disagree, the example (compiler-checked) wins; fix the docs. The Examples nav page (`docs/guide/examples.md` + `docs/zh/guide/examples.md`) indexes them.
 
 Concept docs under `docs/concepts/` are the deep-dive for each major module. Concept 文档在 `docs/concepts/` 下，每个核心模块一份：
 

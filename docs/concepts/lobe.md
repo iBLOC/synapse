@@ -2,33 +2,27 @@
 title: Lobe Module
 ---
 
-# Lobe Module · Lobe 模块（v0.4）
+# Lobe Module
 
 The [`synapse::lobe`](../../src/lobe/mod.rs) module is a thin glue layer for building A2A-speaking agent **lobes** — self-contained services that own one or more skills and expose them as an A2A endpoint.
 
-[`synapse::lobe`](../../src/lobe/mod.rs) 是一个薄薄的 glue 层，用来构建讲 A2A 协议的 agent **lobe** —— 自包含的服务，承载一个或多个 skill，并通过 A2A endpoint 暴露给外部。
-
 It is **not a framework** — it re-uses the existing `synapse::a2a::*`, `synapse::providers::*`, `synapse::transport::*` layers rather than wrapping or replacing them. The point is to compress the boilerplate of "wire a stateless skill executor to an A2A server with service registration and history summarization" into roughly 100 lines of `main.rs`.
-*它**不是一个框架** —— 它复用现成的 `synapse::a2a::*`、`synapse::providers::*`、`synapse::transport::*` 层而不是包一层。目标是把"把 stateless skill executor 接到 A2A server、配上服务注册与历史摘要"的样板压到 100 行 `main.rs`。*
 
 Reference frameworks: LangChain (Python), BeeAI (Python), Eino (Go).
-*参考框架：LangChain（Python）、BeeAI（Python）、Eino（Go）。*
 
-## Why a lobe module · 为什么需要 lobe 模块
+## Why a lobe module
 
 A "lobe" in the Shadow brain architecture is one specialized service (temporal audio / occipital vision / parietal workflow / …). Each lobe needs to:
-*Shadow 大脑架构里一个 lobe = 一个专门服务（颞叶音频 / 枕叶视觉 / 顶叶工作流 / …）。每个 lobe 都要：*
 
-1. Expose one or more skills via A2A / 通过 A2A 暴露一个或多个 skill
-2. Register itself with the brain registry (encephalon) / 在脑 registry（encephalon）注册自己
-3. Stay stateless — conversation history flows in via `SkillContext`, out via `SkillOutput.updated_history_summary`, caller persists / 保持无状态 —— 对话历史从 `SkillContext` 流入、从 `SkillOutput.updated_history_summary` 流出，由调用方持久化
-4. Bundle LLM + TTS + ASR + Emotion providers as one `ProviderSet` / 把 LLM + TTS + ASR + Emotion provider 打包为一个 `ProviderSet`
-5. Optionally summarize long history via `HistorySummarizer` / 长历史可选走 `HistorySummarizer` 摘要
+1. Expose one or more skills via A2A
+2. Register itself with the brain registry (encephalon)
+3. Stay stateless — conversation history flows in via `SkillContext`, out via `SkillOutput.updated_history_summary`, caller persists
+4. Bundle LLM + TTS + ASR + Emotion providers as one `ProviderSet`
+5. Optionally summarize long history via `HistorySummarizer`
 
 `synapse::lobe` packages all five so a lobe author writes the skill — not the A2A plumbing.
-*`synapse::lobe` 把这五件事打包好，让 lobe 作者只写 skill，不用碰 A2A plumbing。*
 
-## Anatomy · 解剖
+## Anatomy
 
 ```
 synapse::lobe/
@@ -48,7 +42,7 @@ synapse::lobe/
 └── media_pipeline.rs          # AsrResult / MediaProcessor / VadState / VideoFrame
 ```
 
-## Quick start · 快速开始
+## Quick start
 
 ```rust,no_run
 use std::sync::Arc;
@@ -76,15 +70,14 @@ async fn main() -> anyhow::Result<()> {
 ```
 
 You automatically get:
-*自动获得：*
 
-- **A2A server** (axum) listening on the requested port / A2A server（axum）监听所请求端口
-- **AgentCard auto-published** to the brain registry at boot / AgentCard 在启动时自动发到 brain registry
-- **`StatelessSkillRouter`** dispatch on `skill_id` / `StatelessSkillRouter` 按 `skill_id` dispatch
-- **Graceful reload** of `LobeConfig` on SIGHUP / SIGHUP 时优雅 reload `LobeConfig`
-- **lobe::metrics** counters wired in / 接好 `lobe::metrics` 计数器
+- **A2A server** (axum) listening on the requested port
+- **AgentCard auto-published** to the brain registry at boot
+- **`StatelessSkillRouter`** dispatch on `skill_id`
+- **Graceful reload** of `LobeConfig` on SIGHUP
+- **lobe::metrics** counters wired in
 
-## Core traits · 核心 traits
+## Core traits
 
 ### `StatelessSkill`
 
@@ -99,7 +92,6 @@ pub trait StatelessSkill: Send + Sync {
 ```
 
 A skill is a single async function that takes typed input + context and returns typed output. **No state lives in the skill itself between calls** — conversation history flows in via `SkillContext.history_summary` and out via `SkillOutput.updated_history_summary`.
-*Skill 是一个 async 函数，输入是 typed `Input` + `SkillContext`，输出是 typed `Output`。**调用之间 skill 内部不持有状态** —— 对话历史通过 `SkillContext.history_summary` 流入、通过 `SkillOutput.updated_history_summary` 流出。*
 
 ### `SkillContext`
 
@@ -113,7 +105,6 @@ pub trait SkillContext: Send + Sync {
 ```
 
 A free-form JSON context object that travels alongside every skill call. The `JsonCtx` struct gives you a default `user_id` + `history_summary` + `extra` for free.
-*伴随每次 skill 调用的自由 JSON context。`JsonCtx` 结构开箱即用地提供 `user_id` + `history_summary` + `extra`。*
 
 ### `SkillOutput`
 
@@ -126,7 +117,6 @@ pub struct SkillOutput {
 ```
 
 Carries the skill's response payload + optional audio output + optional new history summary (caller persists).
-*承载 skill 响应 payload + 可选音频输出 + 可选新历史摘要（由调用方持久化）。*
 
 ### `EmotionProvider`
 
@@ -138,7 +128,6 @@ pub trait EmotionProvider: Send + Sync {
 ```
 
 Lobes that need emotion-aware responses (e.g. companion lobes) implement this; the rest can ignore it. Returns valence / arousal / dominance.
-*需要情绪感知响应的 lobe（比如陪伴 lobe）实现这个 trait；其他 lobe 可以忽略。返回 valence / arousal / dominance。*
 
 ### `LobeEnv`
 
@@ -152,9 +141,8 @@ pub trait LobeEnv {
 ```
 
 Env-driven config trait: each lobe loads its own env vars (`LOBE_BIND`, `LOBE_REGISTRY_URL`, `OPENAI_API_KEY`, …) and produces a `LobeEnv` implementation.
-*环境变量驱动的配置 trait：每个 lobe 加载自己的环境变量（`LOBE_BIND`、`LOBE_REGISTRY_URL`、`OPENAI_API_KEY` …）并产出 `LobeEnv` 实现。*
 
-## Helpers · 助手
+## Helpers
 
 ### `ProviderSet`
 
@@ -168,7 +156,6 @@ pub struct ProviderSet {
 ```
 
 One bundle that holds every provider the lobe needs. Constructed once in `main.rs`, cloned cheaply into every skill.
-*一个 lobe 所需全部 provider 的合集。在 `main.rs` 构造一次，便宜地克隆到每个 skill 里。*
 
 ### `HistorySummarizer`
 
@@ -182,7 +169,6 @@ impl HistorySummarizer {
 ```
 
 LLM-driven summarizer used when `SkillContext.history_summary` is too long to fit the model context. Lobes that don't need long history can skip this entirely.
-*当 `SkillContext.history_summary` 太长装不进模型 context 时使用的 LLM 摘要器。不需要长历史的 lobe 可以完全跳过。*
 
 ### `StatelessSkillRouter`
 
@@ -193,12 +179,10 @@ let router = StatelessSkillRouter::new()
 ```
 
 Maps `skill_id` → `Arc<dyn StatelessSkill>` for A2A dispatch. Built into `LobeApp.skill(...)` automatically.
-*把 `skill_id` 映射到 `Arc<dyn StatelessSkill>` 用于 A2A dispatch。`LobeApp.skill(...)` 自动接好。*
 
-## A2A registration · A2A 注册
+## A2A registration
 
 `LobeApp.serve(...)` boots the axum A2A server and registers the lobe with the brain registry. If you want finer control:
-*`LobeApp.serve(...)` 启动 axum A2A server 并把 lobe 注册到 brain registry。需要更细粒度时：*
 
 ```rust
 use synapse::lobe::{build_a2a_router, register_with_encephalon, AgentCard};
@@ -210,28 +194,28 @@ register_with_encephalon(&card, "http://encephalon:60080").await?;
 axum::serve(tcp_listener, router).await?;
 ```
 
-## `LobeApp` builder · `LobeApp` 构造器
+## `LobeApp` builder
 
-| Method / 方法 | Purpose / 用途 |
+| Method | Purpose |
 |------|------|
-| `LobeApp::new(name, description)` | Start a new app / 新建应用 |
-| `.bind(addr)` | Override bind address / 覆盖绑定地址 |
-| `.skill(Arc<dyn StatelessSkill>)` | Register a skill / 注册 skill |
-| `.provider_set(ps)` | Inject a custom ProviderSet / 注入自定义 ProviderSet |
-| `.env(LobeEnv impl)` | Load env-driven config / 加载环境变量配置 |
-| `.serve(addr)` | Boot axum + register with encephalon + run forever / 启 axum + 注册 encephalon + 永久运行 |
+| `LobeApp::new(name, description)` | Start a new app |
+| `.bind(addr)` | Override bind address |
+| `.skill(Arc<dyn StatelessSkill>)` | Register a skill |
+| `.provider_set(ps)` | Inject a custom ProviderSet |
+| `.env(LobeEnv impl)` | Load env-driven config |
+| `.serve(addr)` | Boot axum + register with encephalon + run forever |
 
-## When to use `synapse::lobe` · 何时用 `synapse::lobe`
+## When to use `synapse::lobe`
 
-| Scenario / 场景 | Use lobe? / 用 lobe? |
+| Scenario | Use lobe? |
 |------|:---:|
-| New specialized agent service (audio / vision / workflow) / 新的专门 agent 服务（音频 / 视觉 / 工作流） | ✅ |
-| One-shot script or library consumer / 一次性脚本或库调用方 | ❌ use `synapse::a2a::*` directly / 直接用 `synapse::a2a::*` |
-| Embedding agent logic inside another Rust crate / 把 agent 逻辑嵌入另一个 Rust crate | ❌ use `synapse::adk::*` / 直接用 `synapse::adk::*` |
-| A WASM sandboxed skill / WASM 沙箱 skill | ✅ via `WasmLobeRuntime` |
-| A pure-Rust skill that needs emotion / 需要情绪的纯 Rust skill | ✅ |
+| New specialized agent service (audio / vision / workflow) | ✅ |
+| One-shot script or library consumer | ❌ use `synapse::a2a::*` directly |
+| Embedding agent logic inside another Rust crate | ❌ use `synapse::adk::*` |
+| A WASM sandboxed skill | ✅ via `WasmLobeRuntime` |
+| A pure-Rust skill that needs emotion | ✅ |
 
-## See also · 相关阅读
+## See also
 
 - [`src/lobe/mod.rs`](../../src/lobe/mod.rs) — module root + rustdoc
 - [`src/lobe/lobe_app.rs`](../../src/lobe/lobe_app.rs) — `LobeApp` convenience builder

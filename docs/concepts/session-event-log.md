@@ -2,26 +2,21 @@
 title: Session Event Log
 ---
 
-# Session Event Log · 会话事件日志
+# Session Event Log
 
 Append-only event persistence for agent sessions, inspired by DeepSeek Harness's session architecture.
-*面向 agent session 的 append-only 事件持久化，灵感来自 DeepSeek Harness 的 session 架构。*
 
-## Overview · 概述
+## Overview
 
 The session event log records every interaction as an immutable event. This enables:
-*会话事件日志把每次交互记录为不可变事件，由此带来：*
 
 - Durable session history that survives restarts
-  *跨重启依然可用的持久化 session 历史*
 - Replay and audit capabilities
-  *重放与审计能力*
 - Fork/resume from any point
-  *从任意点 fork/恢复*
 
-## Types · 类型
+## Types
 
-### SessionEvent · 会话事件
+### SessionEvent
 
 ```rust
 use synapse::session::{SessionEvent, SessionEventType};
@@ -31,22 +26,22 @@ let event = SessionEvent::assistant_message(session_id, "Hi there", 2);
 let event = SessionEvent::tool_call(session_id, "search", &args, 3);
 ```
 
-### SessionEventType · 事件类型
+### SessionEventType
 
-| Type / 类型 | Description / 说明 |
+| Type | Description |
 |------|-------------|
-| `UserMessage` | User input / 用户输入 |
-| `AssistantMessage` | Model response / 模型响应 |
-| `AssistantChunk` | Streaming token / 流式 token |
-| `ToolCall` | Tool invocation / 工具调用 |
-| `ToolResult` | Tool output / 工具输出 |
-| `StepStart/End` | Step boundaries / 步骤边界 |
-| `TurnStart/End` | Turn boundaries / 回合边界 |
-| `Custom(String)` | Application-defined / 应用层自定义 |
+| `UserMessage` | User input |
+| `AssistantMessage` | Model response |
+| `AssistantChunk` | Streaming token |
+| `ToolCall` | Tool invocation |
+| `ToolResult` | Tool output |
+| `StepStart/End` | Step boundaries |
+| `TurnStart/End` | Turn boundaries |
+| `Custom(String)` | Application-defined |
 
-## Storage · 存储
+## Storage
 
-### InMemoryEventStore · 内存事件存储
+### InMemoryEventStore
 
 ```rust
 use synapse::session::InMemoryEventStore;
@@ -56,7 +51,7 @@ store.create_session(&header).await?;
 store.append_event(&event).await?;
 ```
 
-### FileEventStore · 文件事件存储
+### FileEventStore
 
 ```rust
 use synapse::session::FileEventStore;
@@ -71,15 +66,12 @@ store.append_event(&event).await?;
 let events = store.get_events(session_id, from_sequence, Some(10)).await?;
 ```
 
-## File Format · 文件格式
+## File Format
 
 Each session directory contains:
-*每个 session 目录包含：*
 
 - `header.json` — Session metadata
-  *`header.json` —— session 元数据*
 - `events.jsonl` — Append-only event log (one JSON per line)
-  *`events.jsonl` —— append-only 事件日志（每行一个 JSON）*
 
 ```
 /var/lib/my-agent/sessions/

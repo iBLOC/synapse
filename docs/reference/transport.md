@@ -2,10 +2,9 @@
 title: Transport Layer
 ---
 
-# Transport Layer · Transport 层
+# Transport Layer
 
 Cross-platform HTTP abstraction.
-*跨平台 HTTP 抽象。*
 
 ## HttpClient Trait · HttpClient trait
 
@@ -29,14 +28,14 @@ pub struct HttpResponse {
 }
 ```
 
-## Implementations · 实现
+## Implementations
 
-| Target / 目标 | Type / 类型 |
+| Target | Type |
 |--------|------|
-| Native / 原生 | `ReqwestHttpClient` (via reqwest) / 基于 reqwest |
-| WASM | `WasiHttpClient` (via wasi::http) / 基于 wasi::http |
+| Native | `ReqwestHttpClient` (via reqwest) |
+| WASM | `WasiHttpClient` (via wasi::http) |
 
-## Default Selection · 默认选择
+## Default Selection
 
 ```rust
 #[cfg(not(target_arch = "wasm32"))]
@@ -46,6 +45,6 @@ pub type DefaultHttpClient = ReqwestHttpClient;
 pub type DefaultHttpClient = WasiHttpClient;
 ```
 
-## See Also · 相关阅读
+## See Also
 
 - [WASM concepts](/concepts/wasm)

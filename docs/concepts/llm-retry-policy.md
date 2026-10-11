@@ -2,12 +2,11 @@
 title: LLM Retry Policy
 ---
 
-# LLM Retry Policy · LLM 重试策略
+# LLM Retry Policy
 
 Configurable retry with exponential backoff for LLM calls.
-*为 LLM 调用提供可配置的指数退避重试。*
 
-## Quick Start · 快速开始
+## Quick Start
 
 ```rust
 use synapse::providers::{RetryPolicy, RetryMode, BackoffConfig};
@@ -20,9 +19,9 @@ let result = policy.execute(|| async {
 }).await?;
 ```
 
-## Configuration · 配置
+## Configuration
 
-### Default Policy · 默认策略
+### Default Policy
 
 ```rust
 let policy = RetryPolicy::default();
@@ -32,7 +31,7 @@ let policy = RetryPolicy::default();
 // - backoff: 500ms initial, 10s max, 0.1 jitter
 ```
 
-### Custom Policy · 自定义策略
+### Custom Policy
 
 ```rust
 let policy = RetryPolicy::new()
@@ -49,14 +48,14 @@ let policy = RetryPolicy::new()
     });
 ```
 
-## Retry Modes · 重试模式
+## Retry Modes
 
-| Mode / 模式 | Behavior / 行为 |
+| Mode | Behavior |
 |------|----------|
-| `Normal` | Only retry configured error codes / 仅重试配置过的错误码 |
-| `Always` | Retry all failures / 重试所有失败 |
+| `Normal` | Only retry configured error codes |
+| `Always` | Retry all failures |
 
-## Backoff Algorithm · 退避算法
+## Backoff Algorithm
 
 ```
 delay = initial_delay * 2^attempt
@@ -64,12 +63,12 @@ actual_delay = delay + (delay * jitter_ratio * random())
 final_delay = min(actual_delay, max_delay)
 ```
 
-## Error Codes · 错误码
+## Error Codes
 
-| Code / 错误码 | Retryable / 可重试 | Description / 说明 |
+| Code | Retryable | Description |
 |------|-----------|-------------|
-| `RATE_LIMIT` | ✅ | 429 Too Many Requests / 429 请求过多 |
+| `RATE_LIMIT` | ✅ | 429 Too Many Requests |
 | `SERVER` | ✅ | 500/502/503 |
-| `TIMEOUT` | ✅ | Request timeout / 请求超时 |
-| `TRANSPORT` | ✅ | Network error / 网络错误 |
-| `UNKNOWN` | ❌ | Other errors / 其他错误 |
+| `TIMEOUT` | ✅ | Request timeout |
+| `TRANSPORT` | ✅ | Network error |
+| `UNKNOWN` | ❌ | Other errors |

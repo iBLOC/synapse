@@ -2,22 +2,21 @@
 title: MultiAgent Patterns
 ---
 
-# MultiAgent Patterns · MultiAgent 模式
+# MultiAgent Patterns
 
 Synapse supports 4 MultiAgent coordination patterns. All implement
 the standard `Agent` trait, so they're interchangeable.
-*Synapse 支持 4 种 MultiAgent 协调模式。它们都实现标准的 `Agent` trait，因此可以互相替换。*
 
-## Pattern Comparison · 模式对比
+## Pattern Comparison
 
-| Pattern / 模式 | Coordinator / 协调者 | Signal / 信号 | Best For / 适用场景 |
+| Pattern | Coordinator | Signal | Best For |
 |---------|-------------|--------|----------|
-| `RouterSupervisor` | LLM | Tool call / 工具调用 | Single-task classification / 单任务分类 |
-| `OrchestratorAgent` | LLM | Parallel tool calls / 并行工具调用 | Research, multi-perspective / 研究、多视角 |
-| `HandoffSupervisor` | Rule-based / 基于规则 | `event.action.transfer_to` | Multi-role conversations / 多角色对话 |
-| `HybridSupervisor` | LLM + handoff / LLM + handoff | Both / 两者 | Complex flows with escalation / 带升级的复杂流程 |
+| `RouterSupervisor` | LLM | Tool call | Single-task classification |
+| `OrchestratorAgent` | LLM | Parallel tool calls | Research, multi-perspective |
+| `HandoffSupervisor` | Rule-based | `event.action.transfer_to` | Multi-role conversations |
+| `HybridSupervisor` | LLM + handoff / LLM + handoff | Both | Complex flows with escalation |
 
-## Quick API Reference · API 快速参考
+## Quick API Reference
 
 ```rust
 // Router
@@ -49,13 +48,12 @@ HybridSupervisor::builder("name", model)
     .build();
 ```
 
-## Nesting · 嵌套
+## Nesting
 
 All patterns can be nested. A `RouterSupervisor` can have a
 `HandoffSupervisor` as a sub-agent, etc.
-*所有模式都可以嵌套。例如 `RouterSupervisor` 的 sub-agent 之一可以是 `HandoffSupervisor`，等等。*
 
-## See Also · 相关阅读
+## See Also
 
 - [MultiAgent concepts](/concepts/multiagent)
 - [How-to guides](/howto/multiagent-router)

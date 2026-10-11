@@ -2,14 +2,13 @@
 title: Tool
 ---
 
-# Tool · 工具
+# Tool
 
 Tools extend an LLM agent's capabilities. The LLM can decide to "call" a
 tool by emitting a `tool_call` in its response; the agent runtime then
 executes the tool and feeds the result back to the LLM.
-*工具扩展 LLM agent 的能力。LLM 可以在响应中发出 `tool_call` 来决定"调用"某个工具；agent runtime 随后执行该工具，并把结果回传给 LLM。*
 
-## Trait Hierarchy · Trait 层级
+## Trait Hierarchy
 
 ```rust
 pub trait BaseTool: Send + Sync {
@@ -33,11 +32,10 @@ pub trait EnhancedInvokableTool: BaseTool + Send + Sync {
 }
 ```
 
-## ToolInfo Schema · 工具信息 Schema
+## ToolInfo Schema
 
 A tool's `info()` returns a `ToolInfo` describing its name, description,
 and JSON Schema for arguments:
-*工具的 `info()` 返回 `ToolInfo`，描述其 name、description 以及参数的 JSON Schema：*
 
 ```rust
 pub struct ToolInfo {
@@ -47,18 +45,17 @@ pub struct ToolInfo {
 }
 ```
 
-## Built-in Tool Sources · 内置工具来源
+## Built-in Tool Sources
 
-| Source / 来源 | Description / 说明 |
+| Source | Description |
 |--------|-------------|
-| Custom `InvokableTool` | User-defined tools (Calculator, Search, etc.) / 用户自定义工具（Calculator、Search 等） |
-| `McpToolAdapter` | Wraps MCP tools (stdio or HTTP transport) / 包装 MCP 工具（stdio 或 HTTP transport） |
-| `AgentTool` | Wraps any `Agent` as a tool (for MultiAgent) / 把任意 `Agent` 包装成工具（用于 MultiAgent） |
+| Custom `InvokableTool` | User-defined tools (Calculator, Search, etc.) |
+| `McpToolAdapter` | Wraps MCP tools (stdio or HTTP transport) |
+| `AgentTool` | Wraps any `Agent` as a tool (for MultiAgent) |
 
-## Tool Middleware · 工具中间件
+## Tool Middleware
 
 `ChatModelAgent` supports pre/post tool execution hooks via `ToolMiddleware`:
-*`ChatModelAgent` 通过 `ToolMiddleware` 支持 tool 执行前/后的 hook：*
 
 ```rust
 pub trait ToolMiddleware: Send + Sync {
@@ -71,7 +68,7 @@ let agent = ChatModelAgent::builder()
     .build();
 ```
 
-## Example: HTTP Tool · 示例：HTTP 工具
+## Example: HTTP Tool
 
 ```rust
 use async_trait::async_trait;
@@ -110,4 +107,3 @@ impl InvokableTool for HttpGetTool {
 ```
 
 This pattern is used internally by `McpToolAdapter`, `AgentTool`, etc.
-*`McpToolAdapter`、`AgentTool` 等在内部都使用这一模式。*

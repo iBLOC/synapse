@@ -5,9 +5,8 @@ title: Agent Trait
 # Agent Trait · Agent trait
 
 The core abstraction. Every autonomous unit implements this trait.
-*核心抽象。每个自主单元都实现这个 trait。*
 
-## Definition · 定义
+## Definition
 
 ```rust
 #[async_trait]
@@ -25,7 +24,7 @@ pub trait Agent: Send + Sync {
 }
 ```
 
-## Types · 类型
+## Types
 
 ```rust
 pub struct AgentInput {
@@ -63,7 +62,7 @@ pub enum AgentError {
 }
 ```
 
-## See Also · 相关阅读
+## See Also
 
 - [Agent concepts](/concepts/agent)
 - [MultiAgent patterns](/reference/multiagent-patterns)
