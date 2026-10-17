@@ -31,6 +31,7 @@ pub mod decision;
 pub mod components;
 pub mod compose;
 pub mod events;
+pub mod notifications;
 pub mod llm;
 pub mod lobe;
 pub mod mcp;
