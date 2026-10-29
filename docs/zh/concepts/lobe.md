@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
 自动获得：
 
 - A2A server（axum）监听所请求端口
-- AgentCard 在启动时自动发到 brain registry
+- AgentCard 在启动时自动发到 encephalon registry
 - `StatelessSkillRouter` 按 `skill_id` dispatch
 - SIGHUP 时优雅 reload `LobeConfig`
 - 接好 `lobe::metrics` 计数器
@@ -182,7 +182,7 @@ let router = StatelessSkillRouter::new()
 
 ## A2A 注册
 
-`LobeApp.serve(...)` 启动 axum A2A server 并把 lobe 注册到 brain registry。需要更细粒度时：
+`LobeApp.serve(...)` 启动 axum A2A server 并把 lobe 注册到 encephalon registry。需要更细粒度时：
 
 ```rust
 use synapse::lobe::{build_a2a_router, register_with_encephalon, AgentCard};

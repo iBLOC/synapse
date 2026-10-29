@@ -1,0 +1,18 @@
+[package]
+name = "synapse-privacy"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Outbound PII redaction engine for the Shadow platform — shared by synapse, neuron and prefrontal"
+license = "Apache-2.0"
+authors = ["Synapse Contributors"]
+repository = "https://github.com/ibloc/synapse"
+
+[lib]
+name = "synapse_privacy"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+regex = "1"
+parking_lot = "0.12"

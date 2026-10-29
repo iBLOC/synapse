@@ -3812,6 +3812,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sha2",
+ "synapse-privacy",
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
@@ -3827,6 +3828,15 @@ dependencies = [
  "wasmtime",
  "wat",
  "ziti-sdk",
+]
+
+[[package]]
+name = "synapse-privacy"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "regex",
+ "serde",
 ]
 
 [[package]]

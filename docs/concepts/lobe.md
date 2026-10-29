@@ -12,10 +12,10 @@ Reference frameworks: LangChain (Python), BeeAI (Python), Eino (Go).
 
 ## Why a lobe module
 
-A "lobe" in the Shadow brain architecture is one specialized service (temporal audio / occipital vision / parietal workflow / …). Each lobe needs to:
+A "lobe" in the Shadow architecture is one specialized service (temporal audio / occipital vision / parietal workflow / …). Each lobe needs to:
 
 1. Expose one or more skills via A2A
-2. Register itself with the brain registry (encephalon)
+2. Register itself with the encephalon registry
 3. Stay stateless — conversation history flows in via `SkillContext`, out via `SkillOutput.updated_history_summary`, caller persists
 4. Bundle LLM + TTS + ASR + Emotion providers as one `ProviderSet`
 5. Optionally summarize long history via `HistorySummarizer`
@@ -72,7 +72,7 @@ async fn main() -> anyhow::Result<()> {
 You automatically get:
 
 - **A2A server** (axum) listening on the requested port
-- **AgentCard auto-published** to the brain registry at boot
+- **AgentCard auto-published** to the encephalon registry at boot
 - **`StatelessSkillRouter`** dispatch on `skill_id`
 - **Graceful reload** of `LobeConfig` on SIGHUP
 - **lobe::metrics** counters wired in
@@ -182,7 +182,7 @@ Maps `skill_id` → `Arc<dyn StatelessSkill>` for A2A dispatch. Built into `Lobe
 
 ## A2A registration
 
-`LobeApp.serve(...)` boots the axum A2A server and registers the lobe with the brain registry. If you want finer control:
+`LobeApp.serve(...)` boots the axum A2A server and registers the lobe with the encephalon registry. If you want finer control:
 
 ```rust
 use synapse::lobe::{build_a2a_router, register_with_encephalon, AgentCard};

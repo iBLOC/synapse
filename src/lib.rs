@@ -35,6 +35,7 @@ pub mod notifications;
 pub mod llm;
 pub mod lobe;
 pub mod mcp;
+pub mod privacy;
 pub mod protocol;
 pub mod providers;
 pub mod scheduler;

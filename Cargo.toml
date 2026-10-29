@@ -9,7 +9,16 @@ authors = ["Synapse Contributors"]
 repository = "https://github.com/ibloc/synapse"
 homepage = "https://ibloc.github.io/synapse/"
 
+[workspace]
+members = ["crates/privacy"]
+resolver = "3"
+
 [dependencies]
+# Outbound PII redaction engine. Lives in its own crate so lean
+# consumers (neuron) can take it without pulling synapse's runtime
+# dependencies; re-exported as `synapse::privacy`.
+synapse-privacy = { path = "crates/privacy" }
+
 # Logging & tracing
 tracing = "0.1"
 tracing-subscriber = "0.3"
