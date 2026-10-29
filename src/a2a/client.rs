@@ -130,7 +130,11 @@ impl A2AClient {
     }
 }
 
-fn translate_a2a_response_to_agent_events(
+/// Translate an A2A wire response into Synapse agent events.
+///
+/// `pub(crate)` so the A2A server module can round-trip test the
+/// server → wire → client path in one place.
+pub(crate) fn translate_a2a_response_to_agent_events(
     response: a2a::StreamResponse,
     peer_url: &str,
 ) -> Vec<AgentStreamEvent> {
@@ -175,6 +179,22 @@ fn translate_a2a_response_to_agent_events(
         }
         StreamResponse::StatusUpdate(event) => {
             let mut events = Vec::new();
+
+            // A `StatusUpdate` may carry a structured tool event in its
+            // metadata — see `a2a::tool_event`. The A2A wire format has
+            // no tool-event variant of its own, so this side channel is
+            // the only way a tool call can survive the hop. Without it
+            // the tool event was flattened to text on the server side
+            // and dropped here, and the downstream consumer (the
+            // telencephalon end-brain) never saw a `tool_call` at all.
+            if let Some(tool_event) =
+                crate::a2a::tool_event::tool_event_from_metadata(event.metadata.as_ref())
+            {
+                events.push(crate::a2a::tool_event::tool_event_to_agent_event(
+                    tool_event, peer_url,
+                ));
+                return events;
+            }
 
             if event.status.state == a2a::TaskState::Failed {
                 let error_msg = event

@@ -20,6 +20,12 @@
 pub mod card;
 pub mod protocol;
 
+/// Structured tool-event channel for the A2A wire — see the module docs
+/// for why the official `StreamResponse` enum alone cannot carry a tool
+/// call.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod tool_event;
+
 #[cfg(not(target_arch = "wasm32"))]
 pub mod server;
 

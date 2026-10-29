@@ -12,6 +12,7 @@ use futures::stream::BoxStream;
 use tokio::sync::mpsc;
 
 use crate::adk::agent::{Agent, AgentInput, AgentStreamEvent};
+use crate::a2a::tool_event::tool_event_metadata;
 use crate::a2a::AgentCard;
 
 pub struct SynapseAgentExecutor {
@@ -113,7 +114,11 @@ fn translate_agent_event_to_a2a(
                 metadata: None,
             })
         }
-        AgentStreamEvent::ToolStart { agent: _, name, args } => {
+        AgentStreamEvent::ToolStart {
+            agent: _,
+            name,
+            args,
+        } => {
             let text = format!("Calling tool: {}({})", name, args);
             let schema_msg = crate::schema::Message::assistant(text);
             a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
@@ -124,10 +129,19 @@ fn translate_agent_event_to_a2a(
                     message: Some(schema_msg.into_a2a_message()),
                     timestamp: now,
                 },
-                metadata: None,
+                metadata: tool_event_metadata(&AgentStreamEvent::ToolStart {
+                    agent: String::new(),
+                    name: name.clone(),
+                    args: args.clone(),
+                }),
             })
         }
-        AgentStreamEvent::ToolEnd { agent: _, name, result, latency_ms } => {
+        AgentStreamEvent::ToolEnd {
+            agent: _,
+            name,
+            result,
+            latency_ms,
+        } => {
             let text = format!("Tool {} returned: {} ({}ms)", name, result, latency_ms);
             let schema_msg = crate::schema::Message::assistant(text);
             a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
@@ -138,7 +152,29 @@ fn translate_agent_event_to_a2a(
                     message: Some(schema_msg.into_a2a_message()),
                     timestamp: now,
                 },
-                metadata: None,
+                metadata: tool_event_metadata(&AgentStreamEvent::ToolEnd {
+                    agent: String::new(),
+                    name: name.clone(),
+                    result: result.clone(),
+                    latency_ms,
+                }),
+            })
+        }
+        AgentStreamEvent::ToolCall { agent: _, call } => {
+            let text = format!("Calling tool: {}", call.function.name);
+            let schema_msg = crate::schema::Message::assistant(text);
+            a2a::StreamResponse::StatusUpdate(a2a::TaskStatusUpdateEvent {
+                task_id: task_id.to_string(),
+                context_id: context_id.to_string(),
+                status: a2a::TaskStatus {
+                    state: a2a::TaskState::Working,
+                    message: Some(schema_msg.into_a2a_message()),
+                    timestamp: now,
+                },
+                metadata: tool_event_metadata(&AgentStreamEvent::ToolCall {
+                    agent: String::new(),
+                    call: call.clone(),
+                }),
             })
         }
         AgentStreamEvent::Final { agent: _, message } => {
@@ -336,6 +372,67 @@ mod tests {
                 assert_eq!(e.status.state, a2a::TaskState::Working);
             }
             _ => panic!("expected StatusUpdate"),
+        }
+    }
+
+    #[test]
+    fn tool_start_carries_structured_tool_event_in_metadata() {
+        let event = AgentStreamEvent::ToolStart {
+            agent: "x".into(),
+            name: "search".into(),
+            args: "{\"q\":\"rust\"}".into(),
+        };
+        let response = translate_agent_event_to_a2a(event, "task-1", "ctx-1");
+        match response {
+            a2a::StreamResponse::StatusUpdate(e) => {
+                let metadata = e.metadata.expect("tool event must ride in metadata");
+                let decoded = crate::a2a::tool_event::tool_event_from_metadata(Some(&metadata))
+                    .expect("tool event must decode");
+                match decoded {
+                    crate::a2a::tool_event::ToolEvent::Start { name, args } => {
+                        assert_eq!(name, "search");
+                        assert_eq!(args, "{\"q\":\"rust\"}");
+                    }
+                    other => panic!("expected Start, got {other:?}"),
+                }
+            }
+            _ => panic!("expected StatusUpdate"),
+        }
+    }
+
+    /// The regression this whole channel exists for: a tool call must
+    /// survive a full A2A hop — server event → wire JSON → client
+    /// event. Before the structured channel the server flattened the
+    /// tool call to text and the client dropped the status update, so
+    /// the downstream consumer never saw a tool event at all.
+    #[test]
+    fn tool_call_survives_the_full_a2a_hop() {
+        let event = AgentStreamEvent::ToolStart {
+            agent: "x".into(),
+            name: "set_theme".into(),
+            args: "{\"color\":\"#71717A\"}".into(),
+        };
+
+        // server → wire
+        let response = translate_agent_event_to_a2a(event, "task-1", "ctx-1");
+        let wire = serde_json::to_value(&response).expect("serialize wire response");
+
+        // wire → client
+        let decoded: a2a::StreamResponse =
+            serde_json::from_value(wire).expect("deserialize wire response");
+        let events = crate::a2a::client::translate_a2a_response_to_agent_events(
+            decoded,
+            "http://peer:9000",
+        );
+
+        assert_eq!(events.len(), 1, "exactly one event must come back");
+        match &events[0] {
+            AgentStreamEvent::ToolStart { agent, name, args } => {
+                assert_eq!(agent, "http://peer:9000");
+                assert_eq!(name, "set_theme");
+                assert_eq!(args, "{\"color\":\"#71717A\"}");
+            }
+            other => panic!("expected ToolStart after the hop, got {other:?}"),
         }
     }
 }
