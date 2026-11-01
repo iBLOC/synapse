@@ -9,7 +9,7 @@
 //! metrics::install();
 //!
 //! // 2. 启动 metrics HTTP endpoint
-//! metrics::spawn_server("0.0.0.0:9301".parse().unwrap());
+//! metrics::spawn_server("127.0.0.1:9301".parse().unwrap());
 //!
 //! // 3. 记录指标
 //! metrics::counter("request_count", &[("skill", "face_recognition")]).increment(1);

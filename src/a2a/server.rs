@@ -242,10 +242,19 @@ fn translate_agent_event_to_a2a(
 /// // let agent: Arc<dyn Agent> = ...;
 ///
 /// // A2AServerBuilder::new(agent, card)
-/// //     .bind("0.0.0.0:8080".parse()?)
+/// //     .bind("127.0.0.1:8080".parse()?)
 /// //     .serve()
 /// //     .await?;
 /// ```
+/// ⚠️⚠️ **默认监听地址 —— 必须是回环**。
+///
+/// ⇒ ⇒ **宽绑定（`0.0.0.0`）必须显式给**（`.bind(...)`）⇒ ⇒ 理由有二：
+/// ⇒ ⇒ **① 暴露面**（默认安装不该在局域网上可读）；
+/// ⇒ ⇒ **② 形状** —— 宽绑定时**报出去的**地址若也是 `0.0.0.0`
+/// ⇒ ⇒ ⇒ ⇒ 那不是「别人能用来连我」的地址 ⇒ ⇒ 单机上碰巧能通、
+/// ⇒ ⇒ ⇒ ⇒ 换台机器**永远连不上**。
+pub const DEFAULT_A2A_BIND: &str = "127.0.0.1:8080";
+
 pub struct A2AServerBuilder {
     agent: Arc<dyn Agent>,
     card: AgentCard,
@@ -274,7 +283,9 @@ impl A2AServerBuilder {
         self,
         task_store: S,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let bind_addr = self.bind_addr.unwrap_or_else(|| "0.0.0.0:8080".parse().unwrap());
+        let bind_addr = self
+            .bind_addr
+            .unwrap_or_else(|| DEFAULT_A2A_BIND.parse().unwrap());
 
         let executor = SynapseAgentExecutor::new(self.agent);
         let handler = DefaultRequestHandler::new(executor, task_store);
@@ -297,6 +308,20 @@ impl A2AServerBuilder {
 mod tests {
     use super::*;
     use crate::schema::{Content, Message, RoleType};
+
+    /// ⚠️⚠️ **默认监听必须是回环** —— 宽绑定必须显式（`.bind(...)`）。
+    ///
+    /// ⇒ ⇒ 这条钉的是**契约** ⇒ ⇒ 谁把默认值悄悄改回 `0.0.0.0`，
+    /// ⇒ ⇒ 这条当场红 ⇒ ⇒ 而不是等某台机器上「局域网可读」。
+    #[test]
+    fn the_default_bind_is_loopback() {
+        let addr: std::net::SocketAddr =
+            DEFAULT_A2A_BIND.parse().expect("默认地址必须可解析");
+        assert!(
+            addr.ip().is_loopback(),
+            "默认监听必须回环（{DEFAULT_A2A_BIND}）⇒ 宽绑定必须显式"
+        );
+    }
 
     #[test]
     fn token_delta_becomes_append_artifact() {
