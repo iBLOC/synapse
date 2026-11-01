@@ -141,6 +141,18 @@ mod tests {
     }
 
     #[test]
+    fn the_endbrains_own_principal_shape_survives_intact() {
+        // ⚠️ **端脑每天都在递的那个形状** —— `security/identity.rs` 的
+        // `derive_principal_id` ⇒ `principal:<32 hex>` ⇒ ⇒ **带冒号**
+        // ⇒ ⇒ 不是合法海马体租户 ⇒ ⇒ 必须 slug ⇒ ⇒ 而且拼上基名后仍要 ≤ 64。
+        let principal = format!("principal:{}", "0".repeat(32));
+        let t = tenant_id("default", &principal);
+        assert_eq!(t, "default.principal-00000000000000000000000000000000");
+        assert!(is_valid_tenant(&t), "端脑自己的形状必须能落进海马体：{t}");
+        assert!(t.len() <= MAX_TENANT_LEN, "租户不能超长：{t}");
+    }
+
+    #[test]
     fn two_people_never_share_a_tenant() {
         assert_ne!(tenant_id("default", "alice"), tenant_id("default", "bob"));
         assert_ne!(
