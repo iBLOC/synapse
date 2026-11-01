@@ -45,6 +45,7 @@ pub mod session;
 pub mod skills;
 pub mod stream;
 pub mod task;
+pub mod tenant;
 pub mod thought;
 pub mod tools;
 pub mod transport;
