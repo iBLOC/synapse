@@ -2,7 +2,7 @@
 name = "synapse-privacy"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.94"
 description = "Outbound PII redaction engine for the Shadow platform — shared by synapse, neuron and prefrontal"
 license = "Apache-2.0"
 authors = ["Synapse Contributors"]
