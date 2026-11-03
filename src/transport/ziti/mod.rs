@@ -108,6 +108,12 @@ mod gateway;
 mod http_client;
 #[cfg(feature = "ziti")]
 mod listener;
+#[cfg(feature = "ziti")]
+mod proxy;
+#[cfg(all(test, feature = "ziti"))]
+mod live_tests;
+#[cfg(feature = "ziti")]
+mod ws_client;
 
 #[cfg(feature = "ziti")]
 pub use config::{ConfigWatcher, ZitiConfig};
@@ -118,9 +124,17 @@ pub use dark_service::{serve, serve_ziti_stream};
 #[cfg(feature = "ziti")]
 pub use gateway::ZitiGateway;
 #[cfg(feature = "ziti")]
-pub use http_client::{HttpResponse, ZitiHttpClient};
+pub use http_client::{
+    request_over_stream, request_over_stream_bytes, HttpResponse, HttpResponseHead, ZitiHttpClient,
+};
 #[cfg(feature = "ziti")]
 pub use listener::{DarkServiceHandler, DarkServiceListener, ZitiListener};
+#[cfg(feature = "ziti")]
+pub use proxy::{
+    proxy_router, spawn_proxy, tcp_connector, ziti_connector, Connector, ProxyState, Upstream,
+};
+#[cfg(feature = "ziti")]
+pub use ws_client::{connect_ws_over_stream, ZitiWebSocket, ZitiWebSocketClient};
 
 #[cfg(feature = "ziti")]
 pub use ziti_sdk::ZitiStream;

@@ -246,6 +246,20 @@ pub struct ModelSummary {
     pub context_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<u64>,
+    /// ⚠️ **能力**（llm / asr / tts / embedding / vision / rerank / ocr）。
+    ///
+    /// ⚠️ 为什么要有它（2026-11-03）：内置条目（neuron 目录）里的模型**横跨七种
+    /// ⇒ ⇒ 能力** ⇒ ⇒ 不带它，界面分不出「这条是聊天模型还是语音模型」。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability: Option<String>,
+    /// ⚠️ **盘上真的有吗** —— 内置条目里「目录里有、但**还没下载**」的模型也列
+    /// ⇒ ⇒ 出来 ⇒ ⇒ 不带这个标记 ⇒ ⇒ 界面会把「选了也跑不起来」的模型当成
+    /// ⇒ ⇒ 能用的 ⇒ ⇒ 「失败长得像成功」。
+    ///
+    /// ⚠️ 没有这个字段 ＝ **不知道** ⇒ ⇒ 客户端按「可用」处理（云供应商的模型
+    /// ⇒ ⇒ 都是拉下来的 ⇒ ⇒ 那是安全的那一边）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub available: Option<bool>,
 }
 
 /// Errors from [`list_models`].
@@ -384,6 +398,9 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
                 .or(m.max_context_length),
             id: m.id,
             created_at: m.created,
+            // ⚠️ 云端供应商的模型列表里**没有**这两项 ⇒ ⇒ 不知道 ⇒ ⇒ None。
+            capability: None,
+            available: None,
         })
         .collect())
 }
@@ -412,6 +429,9 @@ pub fn parse_claude_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
             id: m.id,
             context_length: None,
             created_at: None,
+            // ⚠️ 云端供应商的模型列表里**没有**这两项 ⇒ ⇒ 不知道 ⇒ ⇒ None。
+            capability: None,
+            available: None,
         })
         .collect())
 }

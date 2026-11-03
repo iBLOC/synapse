@@ -31,6 +31,7 @@ pub mod decision;
 pub mod components;
 pub mod compose;
 pub mod events;
+pub mod hippo_target;
 pub mod notifications;
 pub mod llm;
 pub mod lobe;
