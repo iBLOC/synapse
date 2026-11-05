@@ -178,3 +178,38 @@ reqwest = { version = "0.13", features = ["json", "stream", "multipart"] }
 tokio = { version = "1", features = ["sync", "macros", "io-util", "rt", "time"] }
 wasi = "0.14"
 pollster = "0.4"
+
+# ⚠️ 2026-11-05：下面这些 example 走 `synapse::transport::ziti` ⇒ ⇒ 那个
+#    模块在 `ziti` feature 门后面 ⇒ ⇒ **不声明 required-features 的话**，
+#    cargo 在 `--all-targets` 下会**照样去编它们** ⇒ ⇒ 而默认 features 不含
+#    `ziti` ⇒ ⇒ 必然编不过（E0432: no `ziti` in `transport`）⇒ ⇒ 后果：
+#    `cargo clippy --all-targets` / `cargo build --all-targets` **永远红**
+#    ⇒ ⇒ 整仓 lint 就没人跑了（红久了就没人看 ⇒ ⇒ 整条防线失效）。
+#    ⇒ ⇒ 声明 required-features ⇒ cargo 会**跳过**它们，而不是编失败。
+#    ⚠️ 这不是「给 example 加约束」—— 是把「feature 门」这件事对 cargo 说清楚。
+#    ⚠️ 少了哪一条 ⇒ ⇒ 那个 example 就退回「默认 features 下编不过」⇒ ⇒
+#    整仓 clippy 又红 ⇒ ⇒ 所以这张表是**逐个 example 对着源码核过的**。
+[[example]]
+name = "ziti_raw_probe"
+required-features = ["ziti"]
+[[example]]
+name = "ziti_v2_brain"
+required-features = ["ziti"]
+[[example]]
+name = "ziti_v2_connect"
+required-features = ["ziti"]
+[[example]]
+name = "ziti_v2_e2e"
+required-features = ["ziti"]
+[[example]]
+name = "ziti_v2_hello"
+required-features = ["ziti"]
+[[example]]
+name = "ziti_v2_idle"
+required-features = ["ziti"]
+[[example]]
+name = "ziti_v2_prod"
+required-features = ["ziti"]
+[[example]]
+name = "ziti_wire_probe"
+required-features = ["ziti"]

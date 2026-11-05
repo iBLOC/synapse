@@ -55,24 +55,20 @@ impl WeightedScheduler {
             }
         }
 
-        let start = task.preferred_nodes.first().copied()?;
-for entry in self.graph.top_paths(&start, task.max_depth) {
-    let (path, weight) = entry;
-            let chain = ThoughtChain {
-                id: ChainId::new(),
-                name: format!("auto-{}", task.task_id),
-                nodes: path,
-                total_weight: weight,
-                execution_count: 0,
-                created_at: chrono::Utc::now(),
-            };
-            return Some(TaskAssignment {
-                task_id: task.task_id.clone(),
-                estimated_weight: weight,
-                chain,
-            });
-        }
-
+        // ⚠️ 2026-11-05：这里原来还有一段「auto-」兜底 —— 对
+        //    `preferred_nodes.first()` 再跑一遍 `top_paths` 取第一条。
+        //    ⇒ ⇒ 它是**死代码**，而且是**量出来**的，不是推断的：
+        //      ① preferred_nodes 为空 ⇒ 上面 `.first().copied()?` 直接 None；
+        //      ② preferred_nodes 非空却走到这里 ⇒ 说明上面那个循环里
+        //         **每个** preferred 起点都没找到链 ⇒ 而 find_best_chain 与
+        //         那段兜底用的是**同一个起点、同一个 max_depth** ⇒ ⇒
+        //         `top_paths` 必然还是空的 ⇒ ⇒ 那个 for 的循环体**一次都
+        //         不会执行** ⇒ ⇒ 函数返回 None。
+        //    ⇒ ⇒ 所以剪掉它**行为逐字不变**（可观测行为完全一致），
+        //       顺带把 clippy 的 deny-by-default 正确性 lint（never_loop）
+        //       也一起消掉 —— 那个 lint 让**整仓 `cargo clippy` 直接 error**。
+        //    ⇒ ⇒ 若将来真要做「没有 preferred 起点时自动挑一个」，那是**新功能**
+        //       （要一个「从全图挑起点」的接口），不是修这个 lint。
         None
     }
 
