@@ -128,6 +128,49 @@ impl A2AClient {
             .map_err(|e| a2a::A2AError::new(-1, format!("JSON parse error: {}", e)))?;
         Ok(AgentCard::from_a2a_card(card))
     }
+
+    /// Send a message and return the raw SDK response.
+    ///
+    /// The standard `message/send` answers either with a `Task` (stateful
+    /// agents) or with a plain `Message` (stateless ones). The convenience
+    /// `send_message` above collapses both into a `Message`, which drops
+    /// the peer's task id — callers that want to poll or cancel that task
+    /// later need this variant.
+    pub async fn send_message_response(
+        &self,
+        message: Message,
+    ) -> Result<a2a::SendMessageResponse, a2a::A2AError> {
+        let request = a2a::SendMessageRequest {
+            message: message.into_a2a_message(),
+            configuration: None,
+            metadata: None,
+            tenant: None,
+        };
+
+        self.sdk_client.send_message(&request).await
+    }
+
+    /// Fetch a peer's task by id (`tasks/get`).
+    pub async fn get_task(&self, task_id: &str) -> Result<a2a::Task, a2a::A2AError> {
+        let request = a2a::GetTaskRequest {
+            id: task_id.to_string(),
+            history_length: None,
+            tenant: None,
+        };
+
+        self.sdk_client.get_task(&request).await
+    }
+
+    /// Cancel a peer's task by id (`tasks/cancel`).
+    pub async fn cancel_task(&self, task_id: &str) -> Result<a2a::Task, a2a::A2AError> {
+        let request = a2a::CancelTaskRequest {
+            id: task_id.to_string(),
+            metadata: None,
+            tenant: None,
+        };
+
+        self.sdk_client.cancel_task(&request).await
+    }
 }
 
 /// Translate an A2A wire response into Synapse agent events.
