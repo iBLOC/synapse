@@ -110,7 +110,7 @@ pub use config::{ConfigWatcher, ZitiConfig};
 #[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use connection_pool::ConnectionPool;
 #[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
-pub use dark_service::{serve, serve_ziti_stream};
+pub use dark_service::{serve, serve_with_ready, serve_ziti_stream};
 #[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use gateway::ZitiGateway;
 #[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]

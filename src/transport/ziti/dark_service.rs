@@ -123,6 +123,27 @@ pub async fn serve(
     identity_path: &str,
     service_name: &str,
 ) -> Result<(), ZitiError> {
+    serve_with_ready(router, identity_path, service_name, || {}).await
+}
+
+/// Same as [`serve`], but **it says when it is ready**.
+///
+/// ⚠️ **为什么需要「就绪」** —— `serve` 建好监听器之后**一直跑到永远**
+/// ⇒ ⇒ 调用方拿不到任何「已经 bind 好了」的信号
+/// ⇒ ⇒ 于是「宿主刚起来、客户端马上 dial」会红在
+/// 「路由器拒绝连接: service … has no terminators」
+/// —— **真机上实测过**（账本 ㎞ 条）
+/// ⇒ ⇒ 那**不是代码缺陷**，是**缺一个就绪信号**。
+///
+/// ⇒ ⇒ `on_ready` 在**监听器建好之后**被调用一次
+/// （此刻 terminator 已经在路由器上了）
+/// ⇒ ⇒ 调用方可以「等就绪再 dial」。
+pub async fn serve_with_ready(
+    router: axum::Router,
+    identity_path: &str,
+    service_name: &str,
+    on_ready: impl FnOnce() + Send + 'static,
+) -> Result<(), ZitiError> {
     let gateway = Arc::new(
         ZitiGateway::new(identity_path)
             .await
@@ -134,6 +155,8 @@ pub async fn serve(
         .map_err(|e| ZitiError::ListenError(e.to_string()))?;
 
     info!(service = %service_name, "ziti dark service serving");
+    // ⚠️ **就绪点** —— terminator 已经在路由器上了，客户端现在 dial 就能通。
+    on_ready();
     loop {
         match listener.accept().await {
             Ok(stream) => {
