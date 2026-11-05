@@ -35,7 +35,7 @@ It is the canonical transport for A2A when the public network is untrusted (mult
 | `ConnectionPool` | `struct` | Reusable Ziti streams |
 | `ZitiConfig` | `struct` | JSON config (loaded from controller-side identity file) |
 | `ConfigWatcher` | `struct` | Watch config file changes |
-| `ZitiStream` | re-export from `ziti-sdk` | One bidirectional Ziti connection |
+| `ZitiStream` | re-export from `ziti-v2` | One bidirectional Ziti connection (self-built v2 wire layer) |
 | `ZitiError` | `enum` | Identity / connection / listen / IO errors |
 
 ## Quick start (most callers)
@@ -76,48 +76,47 @@ println!("status: {}", resp.status);
 
 ## Feature gate
 
-The entire module is wrapped in `#[cfg(feature = "ziti")]`. Opening the feature pulls in `ziti-sdk` + hyper glue; without the feature the module is absent from the build graph entirely.
+The entire module is wrapped in `#[cfg(feature = "ziti")]`. Opening the feature pulls in the self-built `ziti-v2` wire layer (path dep `../ziti-rust/crates/ziti-v2`) + hyper glue; without the feature the module is absent from the build graph entirely.
 
 ```bash
 cargo build  -p synapse --features ziti
 cargo test   -p synapse --features ziti --lib transport::ziti
 ```
 
-## SDK caveat — read this before depending on it
+## Wire layer — ours (OpenZiti v2, self-built)
 
 ⚠️ **OpenZiti does not publish an official Rust SDK**. The `openziti` GitHub org maintains official SDKs for Go / C / Swift / Java / Python / C# but **not Rust**.
 
-This module currently wraps the **third-party `ziti-sdk` crate** (`jaschadub/ziti-rust`, MIT, version 0.3.x). That crate is the only Rust binding to OpenZiti currently published on crates.io and it is **community-maintained** — not by the OpenZiti project.
+**Since 2026-11-04 the wire layer is ours.** The third-party `ziti-sdk` crate (`jaschadub/ziti-rust` 0.3.x) spoke the **v1** wire protocol (WebSocket + home-made frames, no magic) — against an OpenZiti **v2** controller it simply cannot connect. It has been **removed from the dependency graph**.
 
-### Mitigation strategy
+The v2 implementation lives in its own repo, `../ziti-rust` (`crates/ziti-v2`), wired in as a **path dependency** (iBLOC is a multi-repo path workspace):
 
-Callers are insulated from SDK churn by the `ZitiGateway` / `ZitiListener` / `ZitiStream` API surface — switching to a different Rust binding (or to OpenZiti's official C SDK via FFI) only requires changes to `gateway.rs` and `listener.rs`. The `serve()` / `serve_ziti_stream()` / `ZitiHttpClient` surface stays stable.
+- channel-v5 binary framing (magic `03 06 09 0c`, little-endian, 20-byte header)
+- content types 60783+ (`Connect` / `StateConnected` / `Data` / `Dial` / `Bind` / …)
+- controller API: authenticate / list services / create service sessions
+- `Connect` (60783) and `Bind` (60790) both answered by `StateConnected` (60784)
+- `ZitiStream` — `AsyncRead + AsyncWrite` over the overlay
 
-If/when the OpenZiti project ships an official Rust SDK, the upgrade path is:
+synapse keeps only a thin re-export facade (`src/transport/ziti/v2/mod.rs` = `pub use ziti_v2::*;`), so caller paths are unchanged. The `ZitiGateway` / `ZitiListener` / `serve()` / `ZitiHttpClient` surface stays stable — that insulation survived the v1 → v2 swap with zero downstream changes, which is exactly what it was designed for.
 
-1. Bump the `ziti-sdk` dep in this crate's `Cargo.toml`
-2. Re-implement `gateway.rs` + `listener.rs` against the new SDK's identity / context / connection types
-3. Re-export `ZitiStream` from the new SDK (or wrap it) so `ZitiHttpClient` and `serve_ziti_stream` keep working unchanged
+### Guard rails
 
-### Why we don't use the C SDK via FFI today
+- The parent repo's `scripts/check-ziti-v2-wire.mjs` pins the protocol constants, the three wire invariants, backpressure symmetry, and the live-test entry points — the gate that stops the constants from silently drifting or v1 from sneaking back.
+- **Live proof** lives in [`src/transport/ziti/live_tests.rs`](../../src/transport/ziti/live_tests.rs): 5 `#[ignore]`d end-to-end tests over a real network (HTTP / WebSocket / SSE / local proxy / full overlay self-hosted). Run them when a real OpenZiti network is up:
 
-The OpenZiti project does ship an official `ziti-sdk-c` with an Apache-2.0 license. Switching to it via FFI was considered and rejected for now:
+```powershell
+$env:ZITI_IDENTITY = "C:\path\to\client.identity.json"
+$env:ZITI_SERVICE   = "shadow-brain"
+# start a host first for the 4 dial-only tests:
+#   cargo run --offline --features ziti --example ziti_v2_brain
+cargo test --offline --features ziti --lib -- --ignored --nocapture
+```
 
-- C-FFI in async Rust adds unsafe-boundary complexity (lifetime management, manual `Send`/`Sync` impl, blocking-call → async adapter).
-- The third-party Rust SDK implements the same wire protocol against the same OpenZiti controllers, so wire compatibility is preserved.
-- The `ZitiGateway` abstraction means a future FFI rewrite is a local change, not an ecosystem-wide migration.
-
-### Vendor strategy (recommended for production)
-
-Treat the upstream `jaschadub/ziti-rust` crate as **untrusted third-party code** even though it's pinned in `Cargo.lock`:
-
-- Fork it under your org's GitHub namespace
-- Vendor it via `[patch.crates-io]` in a workspace-level `Cargo.toml` so a vendored copy is always reachable
-- Track upstream via GitHub watches; the wire protocol itself is stable per OpenZiti's documented spec, so a frozen vendor fork will continue to work against newer controllers as long as the protocol version is still supported
+2026-11-06 reading over the quickstart router: **5 passed / 0 failed in 6.48s** (HTTP 200 + correct body / WS 101 + echo / SSE 200 + separate frames / local proxy 200 / full overlay one-command green).
 
 ## Migration posture
 
-The module is insulated from callers by the `ZitiGateway` / `ZitiListener` / `ZitiStream` API. Swapping to a different SDK (including an eventual official Rust binding) is a local change to `gateway.rs` + `listener.rs`; downstream code is unaffected.
+The module is insulated from callers by the `ZitiGateway` / `ZitiListener` / `ZitiStream` API. Swapping to a different wire implementation (including an eventual official Rust binding) is a local change inside the `ziti-v2` crate plus the `gateway.rs` / `listener.rs` shims; downstream code is unaffected.
 
 ## When to use `transport::ziti`
 
@@ -136,6 +135,7 @@ The module is insulated from callers by the `ZitiGateway` / `ZitiListener` / `Zi
 - [`src/transport/ziti/gateway.rs`](../../src/transport/ziti/gateway.rs) — `ZitiGateway` impl
 - [`src/transport/ziti/listener.rs`](../../src/transport/ziti/listener.rs) — `ZitiListener` impl
 - [`src/transport/ziti/dark_service.rs`](../../src/transport/ziti/dark_service.rs) — `serve()` + `serve_ziti_stream()`
+- [`src/transport/ziti/live_tests.rs`](../../src/transport/ziti/live_tests.rs) — 5 `#[ignore]`d live end-to-end tests (real network)
 - [`src/transport/ziti/http_client.rs`](../../src/transport/ziti/http_client.rs) — `ZitiHttpClient` impl
 - [`src/transport/mod.rs`](../../src/transport/mod.rs) — `HttpClient` trait (parent of all transports)
 - [OpenZiti][openziti] — official project site

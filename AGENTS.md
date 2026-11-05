@@ -1,6 +1,7 @@
 # Synapse — 神经突触层 (Shared Foundation Library)
 
-**Updated**: 2026-11-01 (synapse 库级默认监听改回环 —— 宽绑定必须显式；两条理由，缺一条都不够： ① **暴露面**（默认安装不该在局域网可读）； ② **形状**（`build()` 把 card 的 URL 直接从**监听地址**拼出来 ⇒ ⇒ 宽绑定 ⇒ ⇒ card 报 `http://0.0.0.0:8090` ⇒ ⇒ `0.0.0.0` **不是一个可连接的地址** ⇒ ⇒ 「注册成功、永远连不上」 —— 又一个「失败长得像成功」）； 新增 `lobe_app::DEFAULT_LOBE_BIND`（`127.0.0.1:8090`）与 `a2a::server::DEFAULT_A2A_BIND` （`127.0.0.1:8080`）两个常量 ⇒ ⇒ 宽绑定只能显式（`LOBE_BIND` / `.bind(…)`）； 证据：`cargo test --lib` **336 ⇒ 338 passed / 0 failed**（两条新守卫）⇒ ⇒ 反向验证 （两个常量改回宽绑定 ⇒ ⇒ **恰好 2 红**、其余 336 仍绿）⇒ ⇒ 父仓闸 `check-bind-exposure.mjs --lobes` **0 条 / EXIT=0**（默认档也 0 条）；提交 `1046ff7`);
+**Updated**: 2026-11-06 (OpenZiti v2 线收口 —— **真网 5 条 #[ignore] 全绿**：`cargo test --offline --features ziti --lib -- --ignored --nocapture` ⇒ `5 passed; 0 failed; finished in 6.48s`，EXIT=0（quickstart router @ 192.168.31.170 在线；client/host 身份在 shadow/.ziti/；宿主走生产 serve 入口 example `ziti_v2_brain`；逐条读数：HTTP 200＋体对 / WS 101＋回帧 / SSE 200＋text/event-stream＋分帧 / 本地代理 200＋体对 / 整链 overlay 自宿主自客户端一条命令全绿）；lib 测试 **371 passed / 0 failed / EXIT=0**，本线 3 处 warning 清零（live_tests 两处多余 mut ＋一处未用 import）；手册 `docs/concepts/ziti.md` 与本文件 ziti 段改写为 v2 自建叙事（第三方 ziti-sdk v1 已删出依赖图；`../ziti-rust` crates/ziti-v2 path 依赖；守门员闸 `check-ziti-v2-wire.mjs` ＋ `check-ziti-face.mjs` 全绿、阻断 0 项）);
+2026-11-01 (synapse 库级默认监听改回环 —— 宽绑定必须显式；两条理由，缺一条都不够： ① **暴露面**（默认安装不该在局域网可读）； ② **形状**（`build()` 把 card 的 URL 直接从**监听地址**拼出来 ⇒ ⇒ 宽绑定 ⇒ ⇒ card 报 `http://0.0.0.0:8090` ⇒ ⇒ `0.0.0.0` **不是一个可连接的地址** ⇒ ⇒ 「注册成功、永远连不上」 —— 又一个「失败长得像成功」）； 新增 `lobe_app::DEFAULT_LOBE_BIND`（`127.0.0.1:8090`）与 `a2a::server::DEFAULT_A2A_BIND` （`127.0.0.1:8080`）两个常量 ⇒ ⇒ 宽绑定只能显式（`LOBE_BIND` / `.bind(…)`）； 证据：`cargo test --lib` **336 ⇒ 338 passed / 0 failed**（两条新守卫）⇒ ⇒ 反向验证 （两个常量改回宽绑定 ⇒ ⇒ **恰好 2 红**、其余 336 仍绿）⇒ ⇒ 父仓闸 `check-bind-exposure.mjs --lobes` **0 条 / EXIT=0**（默认档也 0 条）；提交 `1046ff7`);
 2026-11-01 (「监听地址」与「公布地址」分成两个槽 —— 病根是**一个字段说两件事**：宽绑定时监听地址是 `0.0.0.0:19500`，而 `0.0.0.0` **不是一个可连接的地址**（它是「监听所有网卡」）⇒ ⇒ 单机上碰巧能通、换台机器永远连不上 ⇒ ⇒ 「注册成功、永远连不上」（又一个「失败长得像成功」）⇒ ⇒ 一份解析器落在 `synapse::net::bind`（`parse_bind` / `resolve_listen_and_public` / `sanitize_public_url` / `public_url_for_base`；端脑仓那份改成**委托**，路径不变 ⇒ ⇒ **别各写一套** —— 每个叶区仓都依赖 synapse、却都没有端脑依赖 ⇒ ⇒ 放端脑仓叶区就**用不上**）；⇒ ⇒ 叶区注册通道（`lobe::register_with_encephalon`）请求体多一个 `public_url` 槽（显式 `LOBE_PUBLIC_URL` 优先，没给就把监听地址**洗成可连接的**）；⇒ ⇒ ⚠️⚠️ 顺手逮到一条**更老的病**：**改名收口漏了共享库** —— 这个函数一直打在**老路径** `/encephalon/lobes/{name}`，而端脑 v0.3 只挂 `/telencephalon/lobes/{name}` ⇒ ⇒ **404** ⇒ ⇒ 注册**静默失败**（叶区只 `warn!` 一行）⇒ ⇒ 颞叶/顶叶/枕叶/前额叶**从来没注册成功过** ⇒ ⇒ 「端脑知道自己有哪些叶区」有一半是自己种的占位 ⇒ ⇒ 现在**先打新路径**、**只有 404** 才回落到老路径一次（401/403 **不**回落 ⇒ ⇒ 不掩盖鉴权问题）; 2026-10-30 (A2A 工具事件通道 `a2a::tool_event` —— 工具调用以前过不了 A2A 这一跳：官方 `StreamResponse` 只有 `Task`/`Message`/`StatusUpdate`/`ArtifactUpdate` 四个变体、**没有任何一类能承载工具调用**，服务端把 `ToolStart` 拍平成纯文本 `Calling tool: name(args)`、客户端又把不是失败的 `StatusUpdate` **全部丢弃** ⇒ 工具事件在线上被消灭，下游（如 telencephalon 端脑的 `tool_call` 分支）永远不可达。修法：用 `StatusUpdate.metadata` 开一条**结构化旁路**（键 `synapse_tool_event`，值 `{kind: start|call|end, ...}`），服务端写、客户端还原回 `AgentStreamEvent`；**纯文本照样保留** ⇒ 老对端行为不变、线上没删任何东西。反向验证：短路客户端还原 ⇒ 圆跳测试 `a2a::server::tests::tool_call_survives_the_full_a2a_hop` FAILED（`left: 0, right: 1`）); 2026-10-11 (two-locale docs site EN root + `docs/zh/`, copy-as-Markdown + `llms.txt` via postbuild, `examples/` runnable samples; `synapse::acp` client module — drives external ACP agents via the official `agent-client-protocol` 2.2 SDK per `1429a95`); 2026-09-25 (`transport::ziti` per `8ff2294` (2026-09-09), audio providers per `cdb6249` (2026-08-22); A2A metadata wire-forwarding via `__encephalon_meta_v1__` per `135f1fd`; WASM-A2A bridge sync path; zero-warnings pass prior baseline 2026-07-19)
 **Status**: ✅ v0.4 lobe module complete + WASM-A2A sync bridge + A2A metadata round-trip via `__encephalon_meta_v1__` + `transport::ziti` zero-trust A2A over OpenZiti + `acp` client driving external ACP agents (opencode / claude-code-acp / codex-acp)
 
@@ -95,7 +96,7 @@ The `synapse::lobe` module provides lifecycle glue for stateless skill executors
 - async-trait 0.1 — Async traits
 - axum 0.8 — HTTP server (for a2a_server)
 - reqwest 0.13 — HTTP client (with multipart feature for audio providers)
-- ziti-sdk 0.3 — **optional**, behind `feature = "ziti"` (zero-trust A2A over OpenZiti)
+- ziti-v2 (path dep `../ziti-rust/crates/ziti-v2`) — **optional**, behind `feature = "ziti"` (zero-trust A2A over OpenZiti; self-built **v2** wire layer — third-party ziti-sdk v1 removed from the dep graph 2026-11-04)
 - agent-client-protocol 2.2 — **optional**, behind `feature = "acp"` (drives external ACP agents over stdio)
 
 ## `transport::ziti` module (added 2026-09-09)
@@ -121,22 +122,29 @@ Public surface:
 - `ZitiHttpClient` / `ConnectionPool` / `ZitiConfig` /
   `ConfigWatcher` — outbound HTTP + reusable streams + JSON config.
 
-### SDK caveat (read before depending on it)
+### Wire layer (v2, self-built since 2026-11-04)
 
 OpenZiti ships official SDKs for Go / C / Swift / Java / Python /
-C# but **not Rust**. The `ziti-sdk` crate we depend on is the
-only Rust binding on crates.io and is community-maintained, not
-by the OpenZiti project. **Vendor strategy recommended for
-production** — fork `jaschadub/ziti-rust` into the org namespace
-and pin via `[patch.crates-io]` so a stuck upstream doesn't
-take encephalon with it.
+C# but **not Rust**. The old third-party `ziti-sdk` crate (v1
+protocol) has been **removed from the dependency graph** — it
+cannot connect to a v2 controller. The wire layer is now **ours**:
+`ziti-v2` in the sibling repo `../ziti-rust` (`crates/ziti-v2`),
+wired in as a path dependency. synapse keeps only a re-export
+facade (`src/transport/ziti/v2/mod.rs`).
+
+Guard rails: parent-repo gate `check-ziti-v2-wire.mjs` pins the
+protocol constants / wire invariants / live-test entry points;
+live proof in `src/transport/ziti/live_tests.rs` (5 `#[ignore]`d
+tests over a real network) read **5 passed / 0 failed in 6.48s**
+on 2026-11-06 over the quickstart router.
 
 ### Migration posture
 
 The module is insulated from callers by the `ZitiGateway` /
-`ZitiListener` / `ZitiStream` API. Swapping to a different SDK
-(including an eventual official Rust binding) is a local change
-to `gateway.rs` + `listener.rs`; downstream code is unaffected.
+`ZitiListener` / `ZitiStream` API. That insulation survived the
+v1 → v2 swap (and the move to the `ziti-rust` repo) with zero
+downstream changes; future wire swaps stay local to `ziti-v2` +
+`gateway.rs` / `listener.rs`.
 
 ## `acp` Client module (added 2026-09-26)
 

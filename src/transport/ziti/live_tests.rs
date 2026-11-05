@@ -98,7 +98,7 @@ async fn live_http_request_response() {
     let gateway = ZitiGateway::new(&identity).await.expect("加载身份");
 
     let stream = gateway.dial(&service_name()).await.expect("拨号");
-    let (head, mut body) = request_over_stream_bytes(
+    let (head, body) = request_over_stream_bytes(
         stream,
         &service_name(),
         "GET",
@@ -281,7 +281,7 @@ async fn live_overlay_end_to_end() {
 
     // --- 1) 普通请求/响应 ---
     let stream = gateway.dial(&service).await.expect("拨号");
-    let (head, mut body) = request_over_stream_bytes(
+    let (head, body) = request_over_stream_bytes(
         stream,
         &service,
         "GET",
@@ -372,7 +372,7 @@ async fn live_overlay_end_to_end() {
 
 /// 一个**最小**的「大脑面」—— 真网验证只需要证明「这张面能过网」。
 fn live_app() -> axum::Router {
-    use axum::extract::ws::{Message as AxumMessage, WebSocket, WebSocketUpgrade};
+    use axum::extract::ws::{WebSocket, WebSocketUpgrade};
     use axum::response::sse::{Event, Sse};
     use axum::routing::get;
     use std::convert::Infallible;
