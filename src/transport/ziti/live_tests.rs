@@ -14,7 +14,13 @@
 //! $env:ZITI_IDENTITY  = "C:\path\to\client.identity.json"
 //! $env:ZITI_SERVICE   = "shadow-brain"
 //! $env:ZITI_SHADOW_KEY = "..."      # 可选 —— 门要钥匙时
-//! cargo test --offline --features ziti --test ziti_live -- --ignored --nocapture
+//! # ⚠️ 这些测试住在 **src/transport/ziti/**（`mod live_tests;`）⇒ ⇒ 它们是
+//! #    **lib 里的单测** ⇒ ⇒ 目标名是 `--lib`，**不是** `--test ziti_live`
+//! #    （那个文件根本不存在 ⇒ ⇒ 照抄那条命令只会报「no test target」）。
+//! # ⚠️ 顺序很重要：**先起宿主**，否则那 3 条只拨号的会红在
+//! #    「service … has no terminators」：
+//! #    cargo run --offline --features ziti --example ziti_v2_brain
+//! cargo test --offline --features ziti --lib -- --ignored --nocapture
 //! ```
 //!
 //! ## What it proves
@@ -25,6 +31,7 @@
 //! | `live_websocket_upgrade` | the **upgrade** handshake crosses the overlay |
 //! | `live_sse_stream` | a streaming response crosses the overlay |
 //! | `live_proxy_end_to_end` | the **local proxy** (what the frontends use) works end to end |
+//! | `live_overlay_end_to_end` | the **whole overlay**: this process is both host (Bind) and client (Dial) ⇒ ⇒ one command answers 「整条链通不通」 |
 
 use std::time::Duration;
 
