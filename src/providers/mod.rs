@@ -188,6 +188,9 @@ pub mod audio;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod azure;
 pub mod config;
+// ⚠️ **外部工具的模型配置**（opencode / Claude Code / Codex）——
+// 读它们的盘、也写回它们的盘 ⇒ ⇒ 桌面端与端脑共用同一段代码。
+pub mod import;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod mimo;
 #[cfg(not(target_arch = "wasm32"))]

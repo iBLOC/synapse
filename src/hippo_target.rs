@@ -13,7 +13,7 @@
 //!
 //! 1. **显式覆盖**（[`set_base_url`]）—— 宿主给的，最响。
 //! 2. `HIPPOCAMPUS_HOST` 环境变量。
-//! 3. `${TELENCEPHALON_PUBLIC_URL}` / `${CORTEX_PUBLIC_URL}` ＋ `/hippocampus`。
+//! 3. `${TELENCEPHALON_PUBLIC_URL}` ＋ `/hippocampus`。
 //! 4. `http://localhost:60080/hippocampus`（本机）。
 //!
 //! ## 为什么地址可以带路径前缀

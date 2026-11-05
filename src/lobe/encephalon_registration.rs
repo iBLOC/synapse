@@ -18,7 +18,7 @@
 //!
 //! ## ⚠️ 路径：先新后旧（2026-11-01）
 //!
-//! 端脑 v0.3 改名（`cortex` → `encephalon` → `telencephalon`）时，
+//! 端脑 v0.3 改名（`encephalon` → `telencephalon`）时，
 //! **共享库没跟着改** ⇒ ⇒ 这个函数一直打在**老路径**
 //! `/encephalon/lobes/{name}` ⇒ ⇒ 而端脑只挂
 //! `/telencephalon/lobes/{name}` ⇒ ⇒ **404** ⇒ ⇒ 注册**静默失败**
