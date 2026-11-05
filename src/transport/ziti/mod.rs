@@ -36,112 +36,104 @@
 //
 // # Feature gate
 //
-// The entire module is wrapped in `#[cfg(feature = "ziti")]`. Opening
-// the feature pulls in `ziti-sdk` + hyper glue; without the feature
-// the module is absent from the build graph entirely.
+// The entire module is wrapped in `#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]`. Opening
+// the feature pulls in the v2 wire layer (rustls + hyper glue); without
+// the feature the module is absent from the build graph entirely.
 //
-// # SDK caveat — read this before depending on it
+// # v2 —— 线路层是**自建**的
 //
-// **OpenZiti does not publish an official Rust SDK** at the time of
-// writing. The `openziti` GitHub org maintains official SDKs for
-// Go / C / Swift / Java / Python / C# but **not Rust**.
+// **OpenZiti does not publish an official Rust SDK.** The `openziti`
+// GitHub org maintains official SDKs for Go / C / Swift / Java / Python /
+// C# but **not Rust**.
 //
-// This module currently wraps the **third-party `ziti-sdk` crate**
-// (`jaschadub/ziti-rust`, MIT, version 0.3.x). That crate is the
-// only Rust binding to OpenZiti currently published on crates.io
-// and it is community-maintained — not by the OpenZiti project.
+// The community crate `ziti-sdk` (jaschadub/ziti-rust, MIT, 0.3.x) speaks
+// the **v1** wire protocol — WebSocket + a home-made ZitiMessage frame with
+// **no magic**. Against an OpenZiti **v2** controller it simply does not
+// work: the router answers the WebSocket upgrade with
+// `httparse error: invalid HTTP version`, and the control-plane calls the
+// SDK makes (`GET /services/{id}/terminators`,
+// `current-identity/edge-routers`) either 404 or come back without the
+// fields the SDK needs to deserialise.
 //
-// ## Mitigation strategy
+// ⇒ ⇒ So the wire layer here is **ours** (`v2/`): frame codec, controller
+// API, channel, stream, context. Nothing in this module depends on
+// `ziti-sdk` any more.
 //
-// Callers are insulated from SDK churn by the [`ZitiGateway`] /
-// [`ZitiListener`] / [`ZitiStream`] API surface — switching to a
-// different Rust binding (or to OpenZiti's official C SDK via FFI)
-// only requires changes to `gateway.rs` and `listener.rs`. The
-// `serve()` / `serve_ziti_stream()` / `ZitiHttpClient` surface
-// stays stable.
+// ## API stability —— callers 不受影响
 //
-// If/when the OpenZiti project ships an official Rust SDK, the
-// upgrade path is:
-//  1. Bump the `ziti-sdk` dep in this crate's `Cargo.toml`.
-//  2. Re-implement `gateway.rs` + `listener.rs` against the new
-//     SDK's identity / context / connection types.
-//  3. Re-export `ZitiStream` from the new SDK (or wrap it) so
-//     `ZitiHttpClient` and `serve_ziti_stream` keep working
-//     unchanged.
+// The [`ZitiGateway`] / [`ZitiListener`] / [`ZitiStream`] surface is
+// unchanged: the same `dial` / `listen` / `accept` calls, the same
+// `ZitiStream` that behaves like a TCP stream. `serve()` /
+// `serve_ziti_stream()` / `ZitiHttpClient` / `ConnectionPool` are untouched.
 //
-// ## Why we don't use the C SDK via FFI today
+// ## 为什么不用 C SDK 的 FFI
 //
-// The OpenZiti project does ship an official `ziti-sdk-c` with an
-// Apache-2.0 license. Switching to it via FFI was considered and
-// rejected for now:
-//  - C-FFI in async Rust adds unsafe-boundary complexity
-//    (lifetime management, manual Send/Sync impl, blocking-call
-//    → async adapter).
-//  - The third-party Rust SDK implements the same wire protocol
-//    against the same OpenZiti controllers, so wire compatibility
-//    is preserved.
-//  - The `ZitiGateway` abstraction means a future FFI rewrite is a
-//    local change, not an ecosystem-wide migration.
+// The OpenZiti project does ship an official `ziti-sdk-c` (Apache-2.0).
+// FFI in async Rust adds unsafe-boundary complexity (lifetime management,
+// manual Send/Sync impls, blocking-call → async adapter) — and it would
+// still be a second implementation of the same protocol. The self-built v2
+// layer is smaller than the FFI shim would be, and it is the only one that
+// can talk to a v2 controller without a rewrite.
 //
-// ## Vendor strategy (recommended for production)
+// ## 我们钉在哪些规格上
 //
-// Treat the upstream `jaschadub/ziti-rust` crate as **untrusted
-// third-party code** even though it's pinned in Cargo.lock:
-//  - Fork it under your org's GitHub namespace.
-//  - Vendor it via `[patch.crates-io]` in a workspace-level
-//    `Cargo.toml` so a vendored copy is always reachable.
-//  - Track upstream via GitHub watches; the wire protocol itself
-//    is stable per OpenZiti's documented spec, so a frozen vendor
-//    fork will continue to work against newer controllers as long
-//    as the protocol version is still supported.
+// The wire format is **not** stable across OpenZiti majors — v1 and v2 are
+// different protocols. The constants in `v2/proto.rs` are transcribed from
+// the official sources (`openziti/sdk-golang` pb + `openziti/channel`
+// message.go), and the end-to-end behaviour is pinned by the live tests in
+// `live_tests.rs`.
 //
 
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 mod config;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 mod connection_pool;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 mod dark_service;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 mod gateway;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 mod http_client;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 mod listener;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 mod proxy;
-#[cfg(all(test, feature = "ziti"))]
+#[cfg(all(test, feature = "ziti", not(target_arch = "wasm32")))]
 mod live_tests;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 mod ws_client;
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
+pub mod v2;
 
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use config::{ConfigWatcher, ZitiConfig};
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use connection_pool::ConnectionPool;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use dark_service::{serve, serve_ziti_stream};
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use gateway::ZitiGateway;
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use http_client::{
     request_over_stream, request_over_stream_bytes, HttpResponse, HttpResponseHead, ZitiHttpClient,
 };
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use listener::{DarkServiceHandler, DarkServiceListener, ZitiListener};
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use proxy::{
     proxy_router, spawn_proxy, tcp_connector, ziti_connector, Connector, ProxyState, Upstream,
 };
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub use ws_client::{connect_ws_over_stream, ZitiWebSocket, ZitiWebSocketClient};
 
-#[cfg(feature = "ziti")]
-pub use ziti_sdk::ZitiStream;
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
+pub use v2::context::Context;
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
+pub use v2::stream::ZitiStream;
 
 /// Error type for transport::ziti operations. Re-exported so callers
 /// don't need to depend on ziti-sdk directly for error matching.
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 #[derive(Debug, thiserror::Error)]
 pub enum ZitiError {
     #[error("Failed to load identity: {0}")]
@@ -157,5 +149,5 @@ pub enum ZitiError {
     IoError(#[from] std::io::Error),
 }
 
-#[cfg(feature = "ziti")]
+#[cfg(all(feature = "ziti", not(target_arch = "wasm32")))]
 pub type Result<T> = std::result::Result<T, ZitiError>;

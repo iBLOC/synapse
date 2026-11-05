@@ -15,6 +15,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The iBLOC stack is a multi-repo local-path workspace: every crate
+      # resolves siblings via `path = "../<repo>"`. `actions/checkout`
+      # refuses any path outside GITHUB_WORKSPACE, so siblings MUST be
+      # checked out into workspace sub-directories (not `../<repo>`).
+      #
+      # synapse's OpenZiti v2 wire layer lives in the **second crate** of
+      # iBLOC/ziti-rust (`crates/ziti-v2`) ⇒ ⇒ that repo is now a
+      # sibling dependency.
+      - name: Require cross-repo token
+        env:
+          IBLOC_TOKEN: ${{ secrets.IBLOC_TOKEN }}
+        run: |
+          if [ -z "$IBLOC_TOKEN" ]; then
+            echo "::error::secrets.IBLOC_TOKEN is not configured."
+            echo "::error::iBLOC/ziti-rust is a private sibling and cannot be"
+            echo "::error::checked out with the default GITHUB_TOKEN, which is"
+            echo "::error::scoped to iBLOC/synapse only. Add a PAT with read"
+            echo "::error::access to that repo as the IBLOC_TOKEN secret."
+            exit 1
+          fi
+
+      - name: Checkout ziti-rust
+        uses: actions/checkout@v7
+        with:
+          repository: iBLOC/ziti-rust
+          path: ziti-rust
+          token: ${{ secrets.IBLOC_TOKEN }}
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 

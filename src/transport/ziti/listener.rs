@@ -8,7 +8,9 @@ use anyhow::Result;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use ziti_sdk::{ZitiListener as RawZitiListener, ZitiStream};
+
+use super::v2::context::Listener as RawZitiListener;
+use super::ZitiStream;
 
 pub struct ZitiListener {
     inner: RawZitiListener,
@@ -20,7 +22,11 @@ impl ZitiListener {
     }
 
     pub async fn accept(&mut self) -> Result<ZitiStream> {
-        let stream = self.inner.accept().await?;
+        let stream = self
+            .inner
+            .accept()
+            .await
+            .map_err(|e| anyhow::anyhow!("接受零信任连接失败: {e}"))?;
         Ok(stream)
     }
 

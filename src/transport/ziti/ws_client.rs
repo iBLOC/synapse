@@ -26,7 +26,7 @@ use tokio_tungstenite::tungstenite::handshake::client::generate_key;
 use tokio_tungstenite::tungstenite::http::{Request, Response, Uri};
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{client_async, WebSocketStream};
-use ziti_sdk::ZitiStream;
+use super::ZitiStream;
 
 use super::gateway::ZitiGateway;
 use super::ZitiError;

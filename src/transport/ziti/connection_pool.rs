@@ -9,7 +9,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use ziti_sdk::ZitiStream;
+use super::ZitiStream;
 
 use super::gateway::ZitiGateway;
 
