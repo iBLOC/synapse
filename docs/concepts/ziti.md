@@ -104,13 +104,68 @@ synapse keeps only a thin re-export facade (`src/transport/ziti/v2/mod.rs` = `pu
 - The parent repo's `scripts/check-ziti-v2-wire.mjs` pins the protocol constants, the three wire invariants, backpressure symmetry, and the live-test entry points — the gate that stops the constants from silently drifting or v1 from sneaking back.
 - **Live proof** lives in [`src/transport/ziti/live_tests.rs`](../../src/transport/ziti/live_tests.rs): 5 `#[ignore]`d end-to-end tests over a real network (HTTP / WebSocket / SSE / local proxy / full overlay self-hosted). Run them when a real OpenZiti network is up:
 
+### Local test runbook
+
+Three layers, cheapest first. Commands below are verified verbatim against the source (env-var names read from `config.rs` / `live_tests.rs` / the host example, not from memory).
+
+#### 1. Structure gates (shadow repo, no network needed)
+
 ```powershell
-$env:ZITI_IDENTITY = "C:\path\to\client.identity.json"
-$env:ZITI_SERVICE   = "shadow-brain"
-# start a host first for the 4 dial-only tests:
-#   cargo run --offline --features ziti --example ziti_v2_brain
-cargo test --offline --features ziti --lib -- --ignored --nocapture
+node scripts/check-ziti-v2-wire.mjs            # protocol constants + wire invariants + live-test entry points
+node scripts/check-ziti-face.mjs               # eleven wiring rules across the four repos
+node scripts/check-ziti-face.mjs --self-test   # fixture round-trip: 50/50 green
 ```
+
+#### 2. `ziti-rust` crate baseline (no network needed)
+
+The CI workflow pins `dtolnay/rust-toolchain@stable`; the local default toolchain can be older, so measure with the CI-era toolchain explicitly:
+
+```powershell
+cargo +1.99.0 clippy --workspace --all-targets -- -D warnings
+cargo +1.99.0 test  --workspace --lib
+cargo +1.99.0 test  --workspace --doc   # doc-comment indented blocks DO compile as Rust; illustrative frame layouts must be fenced as plain "text"
+```
+
+#### 3. The 5 live tests (real OpenZiti network required)
+
+Prerequisites:
+
+- a quickstart router up and reachable — the identity files embed the controller/edge URLs, so there is no extra address config;
+- an identity pair issued for the dark service `shadow-brain` (host can bind, client can dial), provisioned by `shadow/scripts/openziti-provision.ps1` into `shadow/.ziti/`; the absolute paths are collected in `shadow/.ziti/ziti.env`.
+
+Sanity-check first — the doctor prints each step's real result (status code / full error chain) so you never guess:
+
+```powershell
+$env:ZITI_IDENTITY = "C:\Projects\iBLOC\shadow\.ziti\shadow-brain-client.identity.json"
+cargo run --offline --manifest-path C:\Projects\iBLOC\synapse\Cargo.toml --features ziti --example ziti_doctor
+```
+
+Then two terminals — the host keeps running while the tests dial into it:
+
+```powershell
+# -- Terminal 1: self-host the brain (the production serve entry; keep it in the foreground)
+$env:ZITI_HOST_IDENTITY = "C:\Projects\iBLOC\shadow\.ziti\shadow-brain-host.identity.json"
+$env:ZITI_SERVICE       = "shadow-brain"
+cargo run --offline --manifest-path C:\Projects\iBLOC\synapse\Cargo.toml --features ziti --example ziti_v2_brain
+```
+
+```powershell
+# -- Terminal 2: the 5 #[ignore] live tests
+$env:ZITI_IDENTITY          = "C:\Projects\iBLOC\shadow\.ziti\shadow-brain-client.identity.json"
+$env:ZITI_SERVICE           = "shadow-brain"
+$env:ZITI_TEST_CONVERSATION = "e2e"   # any id works against the example brain; without it the SSE test skips
+cargo test --offline --manifest-path C:\Projects\iBLOC\synapse\Cargo.toml --features ziti --lib -- --ignored --nocapture
+```
+
+Environment variables (shapes read from source, not from memory):
+
+| Variable | Read by | Meaning | Missing implies |
+|------|------|------|------|
+| `ZITI_IDENTITY` | live tests (client side) | dial-side identity | tests **skip**, not fail |
+| `ZITI_SERVICE` | live tests + host example | dark service name | falls back to `shadow-brain` |
+| `ZITI_HOST_IDENTITY` | `ziti_v2_brain` example | bind-side identity | example aborts |
+| `ZITI_TEST_CONVERSATION` | SSE test only | conversation id to stream | SSE test skips |
+| `ZITI_SHADOW_KEY` / `ZITI_ADMIN_TOKEN` | live tests (door headers) | credentials against a *real* brain (the example brain needs none) | anonymous door headers |
 
 2026-11-06 reading over the quickstart router: **5 passed / 0 failed in 6.48s** (HTTP 200 + correct body / WS 101 + echo / SSE 200 + separate frames / local proxy 200 / full overlay one-command green).
 
