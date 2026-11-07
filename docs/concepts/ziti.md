@@ -169,6 +169,49 @@ Environment variables (shapes read from source, not from memory):
 
 2026-11-06 reading over the quickstart router: **5 passed / 0 failed in 6.48s** (HTTP 200 + correct body / WS 101 + echo / SSE 200 + separate frames / local proxy 200 / full overlay one-command green).
 
+### 4. Form A — three Android devices forming a zero-trust LAN (2026-11-07)
+
+One probe binary, three roles, per-device identity files. The probe lives in
+the ziti-rust repo (crates/ziti-v2/examples/ziti_probe.rs) — it depends only on
+ziti-v2, so the Android build surface stays minimal. Exit code 0/1 is the
+easiest thing adb shell can read.
+
+#### Provision (PC, one-time — needs ZITI_ADMIN_PASSWORD)
+
+```powershell
+$env:ZITI_ADMIN_PASSWORD = '...'
+pwsh -File C:\Projects\iBLOC\shadow\scripts\openziti-provision.ps1 -Devices 'dev-a,dev-b,dev-c' -Unauthorized 'dev-x'
+# => .ziti/shadow-brain-dev-{a,b,c}.identity.json (+ dev-x, no service policy)
+# Every device identity gets BOTH Bind and Dial policies => role swap needs zero
+# controller work (T5). dev-x gets none => the controller MUST reject it (T4).
+```
+
+#### Push (PC, per device)
+
+```powershell
+adb push C:/Projects/iBLOC/ziti-rust/dist-android/ziti_probe-aarch64 /data/local/tmp/ziti_probe
+adb push C:/Projects/iBLOC/shadow/.ziti/shadow-brain-dev-a.identity.json /data/local/tmp/ziti/dev-a.identity.json
+# an ELF binary, not an APK — MIUI install restrictions do not apply to push.
+# On old 32-bit devices use the armv7 build instead of aarch64.
+```
+
+#### Assertions
+
+| Test | Run | Expected reading |
+|------|-----|------------------|
+| T1 enroll | each device: ZITI_IDENTITY=/data/local/tmp/ziti/dev-X.identity.json ./ziti_probe doctor | OK 认证成功（… ms）=> 已入网, exit 0 |
+| T2 discover+reach | A: ./ziti_probe bind; then B and C: ./ziti_probe dial | dial: OK 回环闭合：PROBE-… 经服务 shadow-brain 到宿主再回来; bind: OK 已回声给 PROBE-… |
+| T3 IP hiding | inspect identity files + probe output | no peer IP anywhere; devices only ever learn the controller-assigned router address |
+| T4 zero-trust deny | dev-x: ./ziti_probe dial | FAIL 建 Dial 会话没拿到 token（HTTP …）+ controller rejection verbatim, exit 1 |
+| T5 role swap | stop A bind, then B binds / A dials | same readings with roles swapped, no controller changes |
+
+PC-side rehearsal (2026-11-07, quickstart router): dial/bind/doctor all green —
+dial echoed PROBE-OK from pc-host echo=PROBE-1794017796748 back verbatim; doctor
+authenticated in 61 ms. T4 shape rehearsed with the host identity (Bind policy
+only): dial => exit 1 with the controller rejection verbatim
+(HTTP 400 ... "reason":"service not found" — ziti answers not-found rather than
+forbidden, so an unauthorized identity cannot even enumerate the service).
+
 ## Migration posture
 
 The module is insulated from callers by the `ZitiGateway` / `ZitiListener` / `ZitiStream` API. Swapping to a different wire implementation (including an eventual official Rust binding) is a local change inside the `ziti-v2` crate plus the `gateway.rs` / `listener.rs` shims; downstream code is unaffected.
