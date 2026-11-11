@@ -246,7 +246,7 @@ pub struct ModelSummary {
     pub context_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<u64>,
-    /// ⚠️ **能力**（llm / asr / tts / embedding / vision / rerank / ocr）。
+    /// ⚠️ **能力**（llm / asr / tts / embedding / vision / rerank / ocr / image_gen / video_gen；world_gen 预留 —— 云端没有公认的名字形状，暂不推断）。
     ///
     /// ⚠️ 为什么要有它（2026-11-03）：内置条目（neuron 目录）里的模型**横跨七种
     /// ⇒ ⇒ 能力** ⇒ ⇒ 不带它，界面分不出「这条是聊天模型还是语音模型」。
@@ -390,17 +390,20 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
     Ok(parsed
         .data
         .into_iter()
-        .map(|m| ModelSummary {
-            display_name: Some(m.display_name.unwrap_or_else(|| last_segment(&m.id))),
-            context_length: m
-                .context_window
-                .or(m.context_length)
-                .or(m.max_context_length),
-            id: m.id,
-            created_at: m.created,
-            // ⚠️ 云端供应商的模型列表里**没有**这两项 ⇒ ⇒ 不知道 ⇒ ⇒ None。
-            capability: None,
-            available: None,
+        .map(|m| {
+            // ⚠️ 名字自己说清模态的那一族 ⇒ 保守推断；认不出 ⇒ None（不知道）。
+            let capability = infer_capability(&m.id);
+            ModelSummary {
+                display_name: Some(m.display_name.unwrap_or_else(|| last_segment(&m.id))),
+                context_length: m
+                    .context_window
+                    .or(m.context_length)
+                    .or(m.max_context_length),
+                id: m.id,
+                created_at: m.created,
+                capability: capability.map(str::to_string),
+                available: None,
+            }
         })
         .collect())
 }
@@ -424,20 +427,65 @@ pub fn parse_claude_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
     Ok(parsed
         .data
         .into_iter()
-        .map(|m| ModelSummary {
-            display_name: Some(m.display_name.unwrap_or_else(|| m.id.clone())),
-            id: m.id,
-            context_length: None,
-            created_at: None,
-            // ⚠️ 云端供应商的模型列表里**没有**这两项 ⇒ ⇒ 不知道 ⇒ ⇒ None。
-            capability: None,
-            available: None,
+        .map(|m| {
+            // ⚠️ 同一条推断（Anthropic 目录里今天只有聊天模型 ⇒ 推断多半 None）。
+            let capability = infer_capability(&m.id);
+            ModelSummary {
+                display_name: Some(m.display_name.unwrap_or_else(|| m.id.clone())),
+                id: m.id,
+                context_length: None,
+                created_at: None,
+                capability: capability.map(str::to_string),
+                available: None,
+            }
         })
         .collect())
 }
 
 fn last_segment(id: &str) -> String {
     id.rsplit('/').next().unwrap_or(id).to_string()
+}
+
+/// Infer a model's capability from its id, when the id itself names the modality.
+///
+/// ⚠️ **保守推断** —— 只认「名字自己说清了模态」的那一族；认不出 ⇒ `None`
+/// （＝ 不知道 ⇒ 客户端按通用模型处理）。宁缺勿错：把聊天模型误标成
+/// 生成模型 ⇒ 界面与下游按生成模型用它 ⇒ 必错。
+///
+/// 词汇表与端脑内置条目（neuron 目录）同一族：
+/// `asr` / `tts` / `embedding` / `rerank` / `image_gen` / `video_gen`。
+/// ⚠️ rerank 必须先于 embedding 判 —— `BAAI/bge-reranker-v2-m3` 两个族缀都有。
+pub fn infer_capability(id: &str) -> Option<&'static str> {
+    let id = id.to_ascii_lowercase();
+    let has = |needle: &str| id.contains(needle);
+
+    if has("rerank") {
+        return Some("rerank");
+    }
+    if has("embedding") || has("-embed") || has("bge-") {
+        return Some("embedding");
+    }
+    if has("whisper") {
+        return Some("asr");
+    }
+    if has("tts") {
+        return Some("tts");
+    }
+    if has("dall-e")
+        || has("flux")
+        || has("stable-diffusion")
+        || has("sd3")
+        || has("seedream")
+        || has("cogview")
+        || has("kolors")
+        || has("image-01")
+    {
+        return Some("image_gen");
+    }
+    if has("video-01") || has("seedance") || has("kling") {
+        return Some("video_gen");
+    }
+    None
 }
 
 #[cfg(test)]
@@ -557,6 +605,51 @@ mod tests {
             parse_claude_models("<html>404</html>"),
             Err(ModelListError::Parse(_))
         ));
+    }
+
+    #[test]
+    fn capability_inference_names_the_modality_or_stays_silent() {
+        // 名字自己说清模态的那一族 ⇒ 标注。
+        assert_eq!(infer_capability("tts-1"), Some("tts"));
+        assert_eq!(infer_capability("whisper-1"), Some("asr"));
+        assert_eq!(infer_capability("text-embedding-3-small"), Some("embedding"));
+        assert_eq!(infer_capability("BAAI/bge-reranker-v2-m3"), Some("rerank"));
+        assert_eq!(infer_capability("BAAI/bge-m3"), Some("embedding"));
+        assert_eq!(infer_capability("dall-e-3"), Some("image_gen"));
+        assert_eq!(
+            infer_capability("black-forest-labs/FLUX.1-schnell"),
+            Some("image_gen")
+        );
+        assert_eq!(infer_capability("MiniMax/video-01"), Some("video_gen"));
+        // 认不出 ⇒ None —— 聊天模型一个都不许误标。
+        assert_eq!(infer_capability("gpt-4o"), None);
+        assert_eq!(infer_capability("deepseek-ai/DeepSeek-V3"), None);
+        assert_eq!(infer_capability("claude-sonnet-4-20250514"), None);
+        assert_eq!(infer_capability("qwen-max"), None);
+    }
+
+    #[test]
+    fn openai_model_lists_carry_inferred_capability() {
+        let body = r#"{
+            "data": [
+                {"id": "gpt-4o"},
+                {"id": "dall-e-3"},
+                {"id": "tts-1"},
+                {"id": "whisper-1"}
+            ]
+        }"#;
+        let models = parse_openai_models(body).unwrap();
+        assert_eq!(models[0].capability.as_deref(), None);
+        assert_eq!(models[1].capability.as_deref(), Some("image_gen"));
+        assert_eq!(models[2].capability.as_deref(), Some("tts"));
+        assert_eq!(models[3].capability.as_deref(), Some("asr"));
+    }
+
+    #[test]
+    fn claude_model_lists_stay_conservative() {
+        let body = r#"{"data": [{"id": "claude-sonnet-4-20250514"}]}"#;
+        let models = parse_claude_models(body).unwrap();
+        assert_eq!(models[0].capability.as_deref(), None);
     }
 
     // ---- live-free HTTP tests against a one-shot local server ----
