@@ -118,6 +118,26 @@ static PRESETS: &[ProviderPreset] = &[
         default_model: Some("abab6.5s-chat"),
         requires_key: true,
     },
+    // ⚠️ **H3 是另立的预设，不改上面那两条**（2026-11-12）。
+    //
+    // 理由：H3 的域和路径跟老预设**不是同一个** —— 文档给的是
+    // `api.minimax.io/v1`（海外）/ `api.minimax.cn/v1`（国内），出图走
+    // `POST /v1/images/generations`（复数、OpenAI Images 兼容）；而老预设是
+    // `api.minimax.chat/v1`，老的 `image-01` 走的是单数
+    // `POST /v1/image_generation`。改老预设的 `base_url` 会把正在用它跑
+    // 对话的人一起打断 ⇒ ⇒ **新增一条**，老的照旧。
+    //
+    // ⚠️ 这条预设只负责「加得上、拉得到模型列表」；出图由端脑 images 门面
+    // 代理（`{base_url}/images/generations`）⇒ 与 H3 的路径重合。国内部署
+    // 把 base_url 换成 `https://api.minimax.cn/v1`。
+    ProviderPreset {
+        id: "minimax-h3",
+        name: "MiniMax H3（含出图）",
+        base_url: "https://api.minimax.io/v1",
+        api_standard: ApiStandard::OpenAi,
+        default_model: Some("MiniMax-H3-Image"),
+        requires_key: true,
+    },
     ProviderPreset {
         id: "qwen",
         name: "通义千问",
@@ -479,6 +499,13 @@ pub fn infer_capability(id: &str) -> Option<&'static str> {
         || has("cogview")
         || has("kolors")
         || has("image-01")
+        // ⚠️ **MiniMax H3 家族**（2026-11-12）：id 是
+        // `MiniMax-H3-Image` / `MiniMax-H3-Image-Highspeed` /
+        // `MiniMax-H3-Image-Context-IR` ⇒ 只认 `h3-image` / `minimax-h3`
+        // 这两段，**不认宽泛的 `image`** —— 那也会命中视觉理解类模型
+        // （如 `xxx-vl-image`），把它们标成出图模型会让下游真去调它。
+        || has("h3-image")
+        || has("minimax-h3")
     {
         return Some("image_gen");
     }
@@ -507,8 +534,7 @@ mod tests {
     }
 
     #[test]
-    fn anthropic_preset_speaks_claude_standard() {
-        let p = find_preset("anthropic").expect("anthropic preset");
+    fn anthropic_preset_speaks_claude_standard() {        let p = find_preset("anthropic").expect("anthropic preset");
         assert_eq!(p.api_standard, ApiStandard::Claude);
         // Every other preset is OpenAI-standard.
         for p in presets() {
@@ -620,6 +646,19 @@ mod tests {
             infer_capability("black-forest-labs/FLUX.1-schnell"),
             Some("image_gen")
         );
+        // ⚠️ **MiniMax H3 三兄弟**（2026-11-12）：都得出图；
+        // 而视觉理解类 id（带 image 但不带 h3-image）**不许**误标成出图。
+        assert_eq!(infer_capability("MiniMax-H3-Image"), Some("image_gen"));
+        assert_eq!(
+            infer_capability("MiniMax-H3-Image-Highspeed"),
+            Some("image_gen")
+        );
+        assert_eq!(
+            infer_capability("MiniMax-H3-Image-Context-IR"),
+            Some("image_gen")
+        );
+        assert_eq!(infer_capability("minimax/h3-image"), Some("image_gen"));
+        assert_eq!(infer_capability("some-vl-image-understanding"), None);
         assert_eq!(infer_capability("MiniMax/video-01"), Some("video_gen"));
         // 认不出 ⇒ None —— 聊天模型一个都不许误标。
         assert_eq!(infer_capability("gpt-4o"), None);
