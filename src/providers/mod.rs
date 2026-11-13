@@ -200,6 +200,10 @@ pub mod retry;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod catalog;
+/// **出厂「模型 → 能力」清单** —— 兜底用的产品知识（与 `catalog`
+/// 的 `infer_capability` 互补：那条判族缀，这张表登记推断覆盖不了的族）。
+#[cfg(not(target_arch = "wasm32"))]
+pub mod model_capabilities;
 
 pub use registry::{ProviderConfig, ProviderRegistry};
 pub use retry::{BackoffConfig, RetryMode, RetryPolicy};

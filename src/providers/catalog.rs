@@ -280,6 +280,16 @@ pub struct ModelSummary {
     /// ⇒ ⇒ 都是拉下来的 ⇒ ⇒ 那是安全的那一边）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub available: Option<bool>,
+    /// ⚠️ **这条 `capability` 从哪来**（`user` / `upstream` / `catalog` /
+    /// `inferred` / `default`）—— 2026-11-13 加。
+    ///
+    /// ⚠️ 为什么必须带：只给最终词、不说来源 ⇒ ⇒ 「上游真给的」和「我们
+    /// 猜的」在界面上长得一样 ⇒ ⇒ 猜错了没人发现（本仓「失败长得像成功」
+    /// 纪律在**分类**上的落点）。用户据此判断哪条需要自己在模型管理页改。
+    ///
+    /// ⚠️ **只有端脑的读面会填**（它算五档判据）⇒ ⇒ 目录/解析路径留 `None`。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_source: Option<String>,
 }
 
 /// Errors from [`list_models`].
@@ -423,6 +433,8 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
                 created_at: m.created,
                 capability: capability.map(str::to_string),
                 available: None,
+                // 目录解析路径不判来源（端脑读面才判五档）。
+                capability_source: None,
             }
         })
         .collect())
@@ -457,6 +469,8 @@ pub fn parse_claude_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
                 created_at: None,
                 capability: capability.map(str::to_string),
                 available: None,
+                // 目录解析路径不判来源（端脑读面才判五档）。
+                capability_source: None,
             }
         })
         .collect())
