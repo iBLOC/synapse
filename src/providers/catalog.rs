@@ -502,6 +502,13 @@ pub fn infer_capability(id: &str) -> Option<&'static str> {
     if has("whisper") {
         return Some("asr");
     }
+    // ⚠️ **族缀 `-asr` 自己说清了模态**（2026-11-14）：`mimo-2.5-asr` /
+    // `qwen3-asr-flash` / `fun-asr` —— 以前这一族落在 `None` ⇒ 兜底成
+    // `llm` ⇒ 分档卡的 asr 档永远看不见它（真机：小米 MiMo）。
+    // 与 `tts` 同一宽法（裸子串）——真 id 里含 "asr" 却不是识别模型的，没有。
+    if has("asr") {
+        return Some("asr");
+    }
     if has("tts") {
         return Some("tts");
     }
@@ -674,6 +681,15 @@ mod tests {
         assert_eq!(infer_capability("minimax/h3-image"), Some("image_gen"));
         assert_eq!(infer_capability("some-vl-image-understanding"), None);
         assert_eq!(infer_capability("MiniMax/video-01"), Some("video_gen"));
+        // ⚠️ **族缀 `-asr`**（2026-11-14，真机小米 MiMo）：以前落 `None`
+        // ⇒ 兜底 `llm` ⇒ 分档卡 asr 档永远看不见；`-tts` 那半边一直认得。
+        assert_eq!(infer_capability("mimo-2.5-asr"), Some("asr"));
+        assert_eq!(infer_capability("mimo-2.5-tts"), Some("tts"));
+        assert_eq!(infer_capability("qwen3-asr-flash"), Some("asr"));
+        assert_eq!(infer_capability("fun-asr"), Some("asr"));
+        // MiMo 的**对话**两兄弟不许被 asr/tts 词缀误吃。
+        assert_eq!(infer_capability("mimo-2.6"), None);
+        assert_eq!(infer_capability("mimo-2.5"), None);
         // 认不出 ⇒ None —— 聊天模型一个都不许误标。
         assert_eq!(infer_capability("gpt-4o"), None);
         assert_eq!(infer_capability("deepseek-ai/DeepSeek-V3"), None);
