@@ -84,6 +84,16 @@ pub static RULES: &[ModelCapabilityRule] = &[
     rule("*kling*", "image_gen"),
     rule("*flux*", "image_gen"),
     // ── 语音（推断覆盖不到的一族）────────────────────────────────────
+    // ⚠️ **对话族前缀不许吃掉语音 id**（2026-11-15 真机读数）：`*qwen*`
+    // （llm）吃掉了 `qwen3-tts-flash` / `qwen3-asr-flash-realtime`，
+    // `*minimax*`（llm）吃掉了 `MiniMax/speech-2.8-hd` —— 与文件头的
+    // `*minimax-h3*` 同一陷阱。⇒ 虚线族缀 `*-tts*` / `*-asr*`（与 `*qwen*`
+    // 同长，字母序 `-` 在前 ⇒ 排序后先中；前导 `-` 不吃 `ttsx` 这类）；
+    // MiniMax speech 系用更具体的两段式。
+    rule("*minimax/speech*", "tts"),
+    rule("*minimax-speech*", "tts"),
+    rule("*-tts*", "tts"),
+    rule("*-asr*", "asr"),
     rule("*audio-realtime*", "asr"),
     rule("*-realtime-*", "asr"),
     rule("*paraformer*", "asr"),
@@ -213,6 +223,22 @@ mod tests {
             Some("asr")
         );
         assert_eq!(catalog_capability("qwen3.8-max"), Some("llm"));
+    }
+
+    /// ⚠️ **对话族前缀不许吃掉语音 id**（2026-11-15 真机读数：
+    /// `qwen3-tts-flash`/`qwen3-asr-flash-realtime`/`MiniMax/speech-2.8-hd`
+    /// 全被标成 llm —— 与本文件头 `*minimax-h3*` 同一陷阱的 TTS/ASR 面）。
+    #[test]
+    fn voice_ids_beat_the_chat_family_prefixes() {
+        assert_eq!(catalog_capability("qwen3-tts-flash"), Some("tts"));
+        assert_eq!(catalog_capability("qwen3-tts-flash-realtime"), Some("tts"));
+        assert_eq!(catalog_capability("qwen3-asr-flash-realtime"), Some("asr"));
+        assert_eq!(catalog_capability("MiniMax/speech-2.8-hd"), Some("tts"));
+        assert_eq!(catalog_capability("minimax-speech-02-turbo"), Some("tts"));
+        // 负控：对话族照旧 llm、出图照旧 image_gen。
+        assert_eq!(catalog_capability("qwen3.8-max"), Some("llm"));
+        assert_eq!(catalog_capability("MiniMax-M2.5"), Some("llm"));
+        assert_eq!(catalog_capability("MiniMax-H3-Image"), Some("image_gen"));
     }
 
     /// 这一族是 `infer_capability` **完全覆盖不到**的（真机踩到的那条）。
