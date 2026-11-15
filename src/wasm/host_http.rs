@@ -102,6 +102,16 @@ pub trait HttpTransport: Send + Sync {
         req: &WasmHttpRequest,
         max_response_bytes: usize,
     ) -> Result<WasmHttpResponse, String>;
+
+    /// The policy the host wants this transport to run under.
+    ///
+    /// The runtime uses it for the **ABI-side** gate as well, so a host
+    /// that detected a fake-IP resolver can relax exactly that range
+    /// (see [`HttpPolicy::allow_fakeip_range`]) without the module
+    /// ever seeing a policy.
+    fn policy(&self) -> HttpPolicy {
+        HttpPolicy::default()
+    }
 }
 
 /// Per-execution budget for the host capability.
@@ -110,6 +120,22 @@ pub struct HttpPolicy {
     pub max_requests: u32,
     pub max_request_bytes: usize,
     pub max_response_bytes: usize,
+    /// Allow the IETF benchmarking range (198.18.0.0/15) as a target.
+    ///
+    /// ⚠️ **Why this knob exists**: local proxy stacks in fake-IP mode
+    /// (Clash/mihomo and friends) resolve **every** hostname into
+    /// 198.18.0.0/15 and route those addresses through the proxy. A
+    /// strict guard therefore refuses *every* domain on such a machine
+    /// ⇒ the whole capability is unusable there.
+    ///
+    /// ⚠️ **What it costs**: under fake-IP DNS, a name that points at an
+    /// internal host is indistinguishable from a public one (both land in
+    /// 198.18/15) ⇒ with this knob on, **name-based** SSRF is no longer
+    /// caught; only *literal* private/loopback targets still are. ⇒ The
+    /// host must enable it **only** after detecting a fake-IP resolver
+    /// (and should rely on the user's own proxy policy for the rest).
+    /// Default: **off** (strict).
+    pub allow_fakeip_range: bool,
 }
 
 impl Default for HttpPolicy {
@@ -121,6 +147,7 @@ impl Default for HttpPolicy {
             max_requests: 8,
             max_request_bytes: 32 * 1024,
             max_response_bytes: 256 * 1024,
+            allow_fakeip_range: false,
         }
     }
 }
@@ -139,8 +166,15 @@ pub struct HttpHostState {
     pub used: u32,
 }
 
-/// True if this IP must never be reached by a wasm module.
+/// True if this IP must never be reached by a wasm module (strict
+/// posture — the benchmarking range included).
 pub fn ip_is_disallowed(ip: IpAddr) -> bool {
+    ip_is_disallowed_with(ip, false)
+}
+
+/// Same, but with the fake-IP exception applied (see
+/// [`HttpPolicy::allow_fakeip_range`]).
+pub fn ip_is_disallowed_with(ip: IpAddr, allow_fakeip_range: bool) -> bool {
     match ip {
         IpAddr::V4(v4) => {
             let o = v4.octets();
@@ -159,8 +193,10 @@ pub fn ip_is_disallowed(ip: IpAddr) -> bool {
                 || (o[0] == 192 && o[1] == 0 && o[2] == 2)
                 || (o[0] == 198 && o[1] == 51 && o[2] == 100)
                 || (o[0] == 203 && o[1] == 0 && o[2] == 113)
-                // 198.18.0.0/15 benchmarking
-                || (o[0] == 198 && (o[1] & 0xfe) == 18)
+                // 198.18.0.0/15 benchmarking — the range fake-IP proxy
+                // stacks map every hostname into. Rejected by default;
+                // only a host that detected such a resolver may relax it.
+                || (o[0] == 198 && (o[1] & 0xfe) == 18 && !allow_fakeip_range)
                 // 240.0.0.0/4 reserved + 255 broadcast (is_multicast covers ff)
                 || o[0] >= 240
         }
@@ -180,7 +216,7 @@ pub fn ip_is_disallowed(ip: IpAddr) -> bool {
                             (s[7] >> 8) as u8,
                             (s[7] & 0xff) as u8,
                         ]);
-                        matches!(ip, IpAddr::V4(v4) if ip_is_disallowed(IpAddr::V4(v4)))
+                        matches!(ip, IpAddr::V4(v4) if ip_is_disallowed_with(IpAddr::V4(v4), allow_fakeip_range))
                     } else {
                         false
                     }
@@ -214,7 +250,7 @@ fn split_url(raw: &str) -> Option<(String, String)> {
     Some((scheme.to_ascii_lowercase(), host.to_ascii_lowercase()))
 }
 
-fn guard_host(host: &str) -> Result<(), GuardError> {
+fn guard_host(host: &str, allow_fakeip_range: bool) -> Result<(), GuardError> {
     if host.is_empty() {
         return Err(GuardError::MissingHost);
     }
@@ -228,11 +264,21 @@ fn guard_host(host: &str) -> Result<(), GuardError> {
     }
     // literal IP?
     if let Ok(ip) = host.parse::<IpAddr>() {
-        return if ip_is_disallowed(ip) {
+        return if ip_is_disallowed_with(ip, allow_fakeip_range) {
             Err(GuardError::LocalOrPrivate)
         } else {
             Ok(())
         };
+    }
+    // ⚠️ fake-IP mode: the **proxy** resolves the name, not us. Our
+    // resolver's answers would be meaningless (every name lands in
+    // 198.18/15), and resolving here would both depend on DNS and
+    // refuse every public name. ⇒ In that mode we do not resolve at
+    // all; literal private/loopback targets and the special names
+    // above stay refused, and the user's own proxy policy is what
+    // protects the LAN (see `HttpPolicy::allow_fakeip_range`).
+    if allow_fakeip_range {
+        return Ok(());
     }
     // else resolve and fail closed if any answer is disallowed
     let addrs: Vec<IpAddr> = (host, 0u16)
@@ -243,7 +289,10 @@ fn guard_host(host: &str) -> Result<(), GuardError> {
     if addrs.is_empty() {
         return Err(GuardError::Resolve);
     }
-    if addrs.iter().any(|ip| ip_is_disallowed(*ip)) {
+    if addrs
+        .iter()
+        .any(|ip| ip_is_disallowed_with(*ip, allow_fakeip_range))
+    {
         return Err(GuardError::LocalOrPrivate);
     }
     Ok(())
@@ -252,11 +301,16 @@ fn guard_host(host: &str) -> Result<(), GuardError> {
 /// The gate. Rejects disallowed schemes + local/private targets before any
 /// socket opens (see module docs).
 pub fn guard_url(raw: &str) -> Result<(), GuardError> {
+    guard_url_with(raw, &HttpPolicy::default())
+}
+
+/// The gate, with the host's policy (the fake-IP exception lives there).
+pub fn guard_url_with(raw: &str, policy: &HttpPolicy) -> Result<(), GuardError> {
     let (scheme, host) = split_url(raw).ok_or(GuardError::DisallowedScheme)?;
     if scheme != "http" && scheme != "https" {
         return Err(GuardError::DisallowedScheme);
     }
-    guard_host(&host)
+    guard_host(&host, policy.allow_fakeip_range)
 }
 
 fn guard_error_code(e: GuardError) -> i32 {
@@ -285,7 +339,7 @@ pub fn process_http_request(
     }
     let req: WasmHttpRequest =
         serde_json::from_slice(req_bytes).map_err(|_| E_BAD_REQUEST_JSON)?;
-    guard_url(&req.url).map_err(guard_error_code)?;
+    guard_url_with(&req.url, policy).map_err(guard_error_code)?;
     if used >= policy.max_requests {
         return Err(E_TOO_MANY);
     }
@@ -389,6 +443,68 @@ mod tests {
     #[test]
     fn empty_host_rejected() {
         assert_eq!(guard_url("http:///path"), Err(GuardError::DisallowedScheme));
+    }
+
+    #[test]
+    fn the_benchmarking_range_is_refused_by_default() {
+        // 198.18.0.0/15 is where fake-IP proxy stacks put every name.
+        // Strict by default — a host that has *not* detected such a
+        // resolver must not be able to reach it.
+        assert_eq!(
+            guard_url("http://198.18.0.70/"),
+            Err(GuardError::LocalOrPrivate)
+        );
+        assert!(ip_is_disallowed("198.18.0.70".parse().unwrap()));
+    }
+
+    #[test]
+    fn a_fakeip_aware_policy_relaxes_only_that_range() {
+        let relaxed = HttpPolicy {
+            allow_fakeip_range: true,
+            ..Default::default()
+        };
+        // the fake-IP range is reachable now …
+        assert_eq!(guard_url_with("http://198.18.0.70/", &relaxed), Ok(()));
+        // … and **nothing else** is: literal loopback / RFC1918 stay out,
+        // and the special names stay out.
+        for u in [
+            "http://127.0.0.1/",
+            "http://10.0.0.5/",
+            "http://192.168.1.1/",
+            "http://localhost/",
+            "http://[::1]/",
+        ] {
+            assert_eq!(
+                guard_url_with(u, &relaxed),
+                Err(GuardError::LocalOrPrivate),
+                "{u} must stay refused"
+            );
+        }
+    }
+
+    #[test]
+    fn fakeip_mode_does_not_resolve_names() {
+        // In fake-IP mode the *proxy* resolves the name ⇒ our resolver's
+        // answers would be meaningless. Proof that we do not depend on
+        // DNS here: a name that cannot resolve at all is still allowed
+        // (the proxy may know it), while the special names stay out.
+        let relaxed = HttpPolicy {
+            allow_fakeip_range: true,
+            ..Default::default()
+        };
+        assert_eq!(
+            guard_url_with("http://definitely-not-a-real-host.invalid/", &relaxed),
+            Ok(())
+        );
+        assert_eq!(
+            guard_url_with("http://api.localhost/", &relaxed),
+            Err(GuardError::LocalOrPrivate)
+        );
+        // … and in the strict posture the same name is refused (the
+        // *reason* depends on the resolver — a fake-IP resolver would
+        // answer 198.18/15, a dead one would fail to resolve — so we
+        // only pin "refused", not which refusal).
+        assert!(guard_url("http://definitely-not-a-real-host.invalid/").is_err());
     }
 
     // ---- the full decision path (stub transport, no wasm, no DNS) ----
