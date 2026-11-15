@@ -1,6 +1,10 @@
+use super::host_http::{
+    process_http_request, E_NO_MEMORY, E_NO_TRANSPORT, E_OOB, E_REQ_TOO_LARGE, E_RESP_TOO_SMALL,
+    HttpHostConfig, HttpHostState, HttpPolicy,
+};
 use super::package::WasmPackage;
 use std::path::Path;
-use wasmtime::{Config, Engine, Memory, MemoryType, Module, Store};
+use wasmtime::{Caller, Config, Engine, Linker, Module, Store};
 
 #[derive(Debug, Clone)]
 pub struct RuntimeConfig {
@@ -89,27 +93,127 @@ impl WasmRuntime {
     }
 
     pub fn execute(&self, module: &Module, entry: &str, input: &str) -> Result<ExecutionResult, String> {
+        // No network: transport None ⇒ any env.http_request import returns
+        // E_NO_TRANSPORT, but the module still links (import stays declared)
+        // so existing no-http modules run exactly as before.
+        self.execute_inner(
+            module,
+            entry,
+            input,
+            HttpHostState {
+                transport: None,
+                policy: HttpPolicy::default(),
+                used: 0,
+            },
+        )
+    }
+
+    /// Run a module that may call out via the `env.http_request` host
+    /// capability (guarded + budgeted — see [`super::host_http`]). The caller
+    /// owns the transport and must ensure it can block safely on the calling
+    /// thread (the 端脑 `call_wasm` runs this off the async runtime).
+    pub fn execute_with_http(
+        &self,
+        module: &Module,
+        entry: &str,
+        input: &str,
+        host: HttpHostConfig,
+    ) -> Result<ExecutionResult, String> {
+        self.execute_inner(
+            module,
+            entry,
+            input,
+            HttpHostState {
+                transport: Some(host.transport),
+                policy: host.policy,
+                used: 0,
+            },
+        )
+    }
+
+    fn execute_inner(
+        &self,
+        module: &Module,
+        entry: &str,
+        input: &str,
+        host_state: HttpHostState,
+    ) -> Result<ExecutionResult, String> {
         let start = std::time::Instant::now();
-        let mut store = Store::new(&self.engine, ());
+        let mut store = Store::new(&self.engine, host_state);
 
         if let Some(fuel) = self.config.fuel_limit {
             store.set_fuel(fuel).map_err(|e| format!("Failed to set fuel: {}", e))?;
         }
 
-        let memory = Memory::new(&mut store, MemoryType::new(1, Some(16)))
-            .map_err(|e| format!("Failed to create memory: {}", e))?;
+        let mut linker: Linker<HttpHostState> = Linker::new(&self.engine);
+        linker
+            .func_wrap(
+                "env",
+                "http_request",
+                |mut caller: Caller<'_, HttpHostState>,
+                 req_ptr: i32,
+                 req_len: i32,
+                 resp_ptr: i32,
+                 resp_cap: i32|
+                 -> i32 {
+                    let mem = match caller.get_export("memory").and_then(|e| e.into_memory()) {
+                        Some(m) => m,
+                        None => return E_NO_MEMORY,
+                    };
+                    // Pre-checks (they need only a shared borrow of the
+                    // store data; the decision fn itself is pure).
+                    let req_len_u = req_len as usize;
+                    {
+                        let data = caller.data();
+                        if data.transport.is_none() {
+                            return E_NO_TRANSPORT;
+                        }
+                        if req_len_u == 0 || req_len_u > data.policy.max_request_bytes {
+                            return E_REQ_TOO_LARGE;
+                        }
+                    }
+                    let mut buf = vec![0u8; req_len_u];
+                    if mem.read(&caller, req_ptr as usize, &mut buf).is_err() {
+                        return E_OOB;
+                    }
+                    // Snapshot transport + policy + used (clone the Arc) to
+                    // release the borrow before touching the store again.
+                    let (transport, policy, used) = {
+                        let d = caller.data();
+                        (d.transport.clone(), d.policy.clone(), d.used)
+                    };
+                    let transport = match transport {
+                        Some(t) => t,
+                        None => return E_NO_TRANSPORT,
+                    };
+                    let out = match process_http_request(&transport, &policy, used, &buf) {
+                        Ok(o) => o,
+                        Err(code) => return code,
+                    };
+                    if out.len() > resp_cap as usize {
+                        return E_RESP_TOO_SMALL;
+                    }
+                    if mem.write(&mut caller, resp_ptr as usize, &out).is_err() {
+                        return E_OOB;
+                    }
+                    caller.data_mut().used += 1;
+                    out.len() as i32
+                },
+            )
+            .map_err(|e| format!("Failed to bind http_request import: {e}"))?;
 
-        let instance = wasmtime::Linker::<()>::new(&self.engine)
-            .instantiate(&mut store, module)
+        let instance = linker.instantiate(&mut store, module)
             .map_err(|e| format!("Failed to instantiate: {}", e))?;
 
-        let memory_used = memory.data_size(&store) / (1024 * 1024);
+        let mem = instance
+            .get_memory(&mut store, "memory")
+            .ok_or_else(|| "memory export not found".to_string())?;
+        let memory_used = mem.data_size(&store) / (1024 * 1024);
 
         let output = self.call_entry(&mut store, &instance, entry, input)?;
         let fuel_consumed = self.config.fuel_limit.unwrap_or(0)
             .saturating_sub(store.get_fuel().unwrap_or(0));
         let duration_ms = start.elapsed().as_millis() as u64;
-
         Ok(ExecutionResult {
             output,
             fuel_consumed,
@@ -127,9 +231,9 @@ impl WasmRuntime {
         self.execute(&module, &package.metadata.entry, input)
     }
 
-    fn call_entry(
+    fn call_entry<T>(
         &self,
-        store: &mut Store<()>,
+        store: &mut Store<T>,
         instance: &wasmtime::Instance,
         entry: &str,
         input: &str,
