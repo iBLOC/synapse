@@ -112,6 +112,11 @@ pub static RULES: &[ModelCapabilityRule] = &[
     rule("*minimax/asr*", "asr"),
     rule("*-tts*", "tts"),
     rule("*-asr*", "asr"),
+    // ⚠️ **小米 MiMo 的真 id 带 `v`**（2026-11-15）：`mimo-v2.5-tts` /
+    // `mimo-v2.5-asr` ⇒ ⇒ 钉住它们的模式必须**比对话族的 `*mimo*` 长**
+    // （15 字 vs 6 字）⇒ ⇒ 否则会被对话族先吃掉落 llm。
+    rule("*mimo-v2.5-tts*", "tts"),
+    rule("*mimo-v2.5-asr*", "asr"),
     rule("*audio-realtime*", "asr"),
     rule("*-realtime-*", "asr"),
     rule("*paraformer*", "asr"),
@@ -136,6 +141,10 @@ pub static RULES: &[ModelCapabilityRule] = &[
     rule("*mistral*", "llm"),
     rule("*hunyuan*", "llm"),
     rule("*minimax*", "llm"),
+    // ⚠️ **小米 MiMo 的对话族**（2026-11-15）：`mimo-v2.6-pro` /
+    // `mimo-v2.6-flash` / `mimo-v2.6-pro-ultraspeed` ⇒ ⇒ 清单层认它们
+    // ⇒ ⇒ 分档卡显示「来源＝清单」而不是兜底推断。
+    rule("*mimo*", "llm"),
     rule("*doubao*", "llm"),
     rule("*gemini*", "llm"),
     rule("*claude*", "llm"),
@@ -331,14 +340,48 @@ mod tests {
             // 兄弟供应商的同类 id（不许被 minimax 的规则误吃）。
             ("qwen3-tts-flash", "tts"),
             ("qwen3-asr-flash-realtime", "asr"),
-            ("mimo-2.5-tts", "tts"),
-            ("mimo-2.5-asr", "asr"),
-            ("mimo-2.6", "llm"),
+            ("mimo-v2.5-tts", "tts"),
+            ("mimo-v2.5-asr", "asr"),
+            ("mimo-v2.6-pro", "llm"),
+            ("mimo-v2.6-flash", "llm"),
+            ("mimo-v2.6-pro-ultraspeed", "llm"),
+            ("mimo-v2.5-tts-voiceclone", "tts"),
+            ("mimo-v2.5-tts-voicedesign", "tts"),
         ];
         for (id, expected) in cases {
             let effective = effective_capability(id).unwrap_or("llm");
             assert_eq!(effective, *expected, "effective capability of {id}");
         }
+    }
+
+    /// ⚠️ **小米 MiMo 的官方真 id 全表**（2026-11-15）—— 官方
+    /// `GET /v1/models` 示例与限速页逐字：`mimo-v2.6-pro` /
+    /// `mimo-v2.6-flash` / `mimo-v2.6-pro-ultraspeed`（对话）、
+    /// `mimo-v2.5-asr`（识别）、`mimo-v2.5-tts` /
+    /// `mimo-v2.5-tts-voiceclone` / `mimo-v2.5-tts-voicedesign`（合成）。
+    ///
+    /// ⚠️ **清单层（`catalog_capability`）也得认** —— 端脑那条链是
+    /// 「清单 → 推断 → 兜底 llm」⇒ ⇒ 清单层落空 ⇒ ⇒ 界面显示的「来源」
+    /// 变成兜底推断 ⇒ ⇒ 用户看到的是「能力由系统猜的」而不是「官方目录
+    /// 就这么标的」。
+    #[test]
+    fn the_official_mimo_model_ids_land_on_the_right_tier() {
+        let cases: &[(&str, &str)] = &[
+            ("mimo-v2.6-pro", "llm"),
+            ("mimo-v2.6-flash", "llm"),
+            ("mimo-v2.6-pro-ultraspeed", "llm"),
+            ("mimo-v2.5-asr", "asr"),
+            ("mimo-v2.5-tts", "tts"),
+            ("mimo-v2.5-tts-voiceclone", "tts"),
+            ("mimo-v2.5-tts-voicedesign", "tts"),
+        ];
+        for (id, expected) in cases {
+            assert_eq!(catalog_capability(id), Some(*expected), "catalog tier of {id}");
+            assert_eq!(effective_capability(id), Some(*expected), "effective tier of {id}");
+        }
+        // ⚠️ **已下线的 `mimo-v2.5-pro`** 仍归对话档（兜底也是 llm）⇒ ⇒
+        // 不会因为「下线」而混进语音档。
+        assert_eq!(effective_capability("mimo-v2.5-pro").unwrap_or("llm"), "llm");
     }
 
     /// ⚠️ **命名空间前缀是常态** —— 这条测试就是真机那 182 条的形状。

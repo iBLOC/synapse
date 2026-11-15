@@ -12,7 +12,9 @@ impl MimoProvider {
         Self {
             inner: OpenAIProvider::new(api_key)
                 .with_base_url("https://api.xiaomimimo.com/v1")
-                .with_model("mimo-v2.5-pro"),
+                // ⚠️ **活模型**（2026-11-15）：`mimo-v2.5-pro` 已于 2026.10.21
+                // 10:00(UTC+8) 正式下线 ⇒ ⇒ 默认模型必须是 `mimo-v2.6-pro`。
+                .with_model("mimo-v2.6-pro"),
         }
     }
 

@@ -75,7 +75,10 @@ static PRESETS: &[ProviderPreset] = &[
         name: "Xiaomi MiMo",
         base_url: "https://api.xiaomimimo.com/v1",
         api_standard: ApiStandard::OpenAi,
-        default_model: Some("mimo-v2.5-pro"),
+        // ⚠️ **默认模型必须是活模型**（2026-11-15）：`mimo-v2.5-pro` 与
+        // `mimo-v2.5` 已于 2026.10.21 10:00(UTC+8) 正式下线 ⇒ ⇒ 拿死模型当
+        // 默认 ⇒ ⇒ 用户新建完供应商，第一次调用就是「模型不存在」。
+        default_model: Some("mimo-v2.6-pro"),
         requires_key: true,
     },
     ProviderPreset {
@@ -523,7 +526,7 @@ pub fn infer_capability(id: &str) -> Option<&'static str> {
     if has("whisper") {
         return Some("asr");
     }
-    // ⚠️ **族缀 `-asr` 自己说清了模态**（2026-11-14）：`mimo-2.5-asr` /
+    // ⚠️ **族缀 `-asr` 自己说清了模态**（2026-11-14）：`mimo-v2.5-asr` /
     // `qwen3-asr-flash` / `fun-asr` —— 以前这一族落在 `None` ⇒ 兜底成
     // `llm` ⇒ 分档卡的 asr 档永远看不见它（真机：小米 MiMo）。
     // 与 `tts` 同一宽法（裸子串）——真 id 里含 "asr" 却不是识别模型的，没有。
@@ -760,13 +763,17 @@ mod tests {
         assert_eq!(infer_capability("MiniMax/video-01"), Some("video_gen"));
         // ⚠️ **族缀 `-asr`**（2026-11-14，真机小米 MiMo）：以前落 `None`
         // ⇒ 兜底 `llm` ⇒ 分档卡 asr 档永远看不见；`-tts` 那半边一直认得。
-        assert_eq!(infer_capability("mimo-2.5-asr"), Some("asr"));
-        assert_eq!(infer_capability("mimo-2.5-tts"), Some("tts"));
+        // ⚠️ **真 id 带 `v`**（2026-11-15 订正）：官方目录里是
+        // `mimo-v2.5-asr` / `mimo-v2.5-tts` ⇒ ⇒ 以前写的 `mimo-2.5-asr`
+        // 是**假 id** ⇒ ⇒ 这条判据绿成假象（真 id 从来没被它碰过）。
+        assert_eq!(infer_capability("mimo-v2.5-asr"), Some("asr"));
+        assert_eq!(infer_capability("mimo-v2.5-tts"), Some("tts"));
         assert_eq!(infer_capability("qwen3-asr-flash"), Some("asr"));
         assert_eq!(infer_capability("fun-asr"), Some("asr"));
-        // MiMo 的**对话**两兄弟不许被 asr/tts 词缀误吃。
-        assert_eq!(infer_capability("mimo-2.6"), None);
-        assert_eq!(infer_capability("mimo-2.5"), None);
+        // MiMo 的**对话**兄弟不许被 asr/tts 词缀误吃（真 id）。
+        assert_eq!(infer_capability("mimo-v2.6-pro"), None);
+        assert_eq!(infer_capability("mimo-v2.6-flash"), None);
+        assert_eq!(infer_capability("mimo-v2.6-pro-ultraspeed"), None);
     }
 
     /// ⚠️ **MiniMax 的语音/视频真 id**（2026-11-15）—— TTS 真 id 名字里
@@ -787,6 +794,21 @@ mod tests {
         assert_eq!(infer_capability("deepseek-ai/DeepSeek-V3"), None);
         assert_eq!(infer_capability("claude-sonnet-4-20250514"), None);
         assert_eq!(infer_capability("qwen-max"), None);
+    }
+
+    /// ⚠️ **小米 MiMo 的默认模型不能是死模型**（2026-11-15）：官方文档站
+    /// 全站横幅写明 `MiMo-V2.5-Pro` / `MiMo-V2.5` 已于 2026.10.21
+    /// 10:00(UTC+8) 正式下线 ⇒ ⇒ 预设拿死模型当默认 ⇒ ⇒ 用户新建完供应商，
+    /// 第一次调用就撞「模型不存在」⇒ ⇒ 「配得出来、用不起来」。
+    #[test]
+    fn the_mimo_preset_points_at_a_live_model() {
+        let p = find_preset("xiaomi-mimo").expect("xiaomi-mimo preset");
+        assert_eq!(p.base_url, "https://api.xiaomimimo.com/v1");
+        let model = p.default_model.expect("mimo preset default model");
+        assert_eq!(model, "mimo-v2.6-pro");
+        // 死模型不许再回来。
+        assert_ne!(model, "mimo-v2.5-pro");
+        assert_ne!(model, "mimo-v2.5");
     }
 
     #[test]
