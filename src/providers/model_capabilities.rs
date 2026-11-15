@@ -82,6 +82,14 @@ pub static RULES: &[ModelCapabilityRule] = &[
     rule("*dall-e*", "image_gen"),
     rule("*kolors*", "image_gen"),
     rule("*kling*", "image_gen"),
+    // ⚠️ **MiniMax 视频族**（`MiniMax-Hailuo-*`）—— 端脑词表无 video 档
+    // ⇒ ⇒ 与 seedance/kling 同归 image_gen。
+    //
+    // ⚠️ **模式必须比 `*minimax*`（9 字）长** —— 规则按**长度降序**求值
+    // ⇒ ⇒ `*hailuo*`（8 字）会被 `*minimax*` 先吃掉 ⇒ ⇒ 落 llm ✗
+    // ⇒ ⇒ 这里用两段式（`minimax-hailuo` / `minimax/hailuo`）。
+    rule("*minimax-hailuo*", "image_gen"),
+    rule("*minimax/hailuo*", "image_gen"),
     rule("*flux*", "image_gen"),
     // ── 语音（推断覆盖不到的一族）────────────────────────────────────
     // ⚠️ **对话族前缀不许吃掉语音 id**（2026-11-15 真机读数）：`*qwen*`
@@ -92,6 +100,16 @@ pub static RULES: &[ModelCapabilityRule] = &[
     // MiniMax speech 系用更具体的两段式。
     rule("*minimax/speech*", "tts"),
     rule("*minimax-speech*", "tts"),
+    // ⚠️ **MiniMax 的真 id 是裸名**（2026-11-15）：`speech-2.8-hd` /
+    // `speech-02-turbo` / `speech-01-hd` / `asr-1.0` ⇒ ⇒ 名字里**没有**
+    // `minimax` 前缀 ⇒ ⇒ 上面两条命不中 ⇒ ⇒ 清单层落空（而族缀推断同样
+    // 认不出 `speech-`）⇒ ⇒ 分档卡的 tts/asr 档看不见它们。
+    rule("*speech-*", "tts"),
+    rule("asr-*", "asr"),
+    // ⚠️ **命名空间形态**（`MiniMax/asr-1.0`）—— 裸前缀 `asr-*` 只认
+    // 「开头就是 asr-」⇒ ⇒ 带命名空间就落空 ⇒ ⇒ 而 `*minimax*`（9 字）
+    // 又会先把它吃成 llm ⇒ ⇒ 必须另立一条**更长**的模式。
+    rule("*minimax/asr*", "asr"),
     rule("*-tts*", "tts"),
     rule("*-asr*", "asr"),
     rule("*audio-realtime*", "asr"),
@@ -204,6 +222,20 @@ pub fn catalog_capability(model_id: &str) -> Option<&'static str> {
         .map(|r| r.capability)
 }
 
+/// 两层合并：**出厂清单 → 族缀推断**（端脑那条链的前两档）。
+///
+/// ⚠️ 端脑的判据链是「用户覆盖 → 上游标注 → **出厂清单** → **族缀推断**
+/// → 兜底 `llm`」（`telencephalon/src/api/providers.rs` 的
+/// `effective_capabilities_for`）⇒ ⇒ 本函数把中间那两档**收在一处**
+/// ⇒ ⇒ 两张表再也不会各说各话（2026-11-15 之前它们对 `asr-1.0` 就各说
+/// 各话：清单层落空、推断层说 asr）。
+///
+/// ⚠️ 兜底 `llm` 与**词表归一**（`video_gen` → `image_gen`）**留在端脑**
+/// ⇒ ⇒ 那是端脑词表的事，不是「认出这条是什么模型」的事。
+pub fn effective_capability(model_id: &str) -> Option<&'static str> {
+    catalog_capability(model_id).or_else(|| crate::providers::catalog::infer_capability(model_id))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,6 +280,65 @@ mod tests {
         assert_eq!(catalog_capability("gpt-4o-realtime-preview"), Some("asr"));
         assert_eq!(catalog_capability("paraformer-v2"), Some("asr"));
         assert_eq!(catalog_capability("cosyvoice-v2"), Some("tts"));
+    }
+
+    /// ⚠️ **MiniMax 的真 id 是裸名**（2026-11-15）—— 清单层必须认得，
+    /// 否则分档卡的 tts/asr 档永远看不见它们。
+    #[test]
+    fn minimax_bare_voice_ids_are_recognized() {
+        assert_eq!(catalog_capability("speech-2.8-hd"), Some("tts"));
+        assert_eq!(catalog_capability("speech-2.8-turbo"), Some("tts"));
+        assert_eq!(catalog_capability("speech-02-turbo"), Some("tts"));
+        assert_eq!(catalog_capability("speech-01-hd"), Some("tts"));
+        assert_eq!(catalog_capability("asr-1.0"), Some("asr"));
+        // 负控：对话族不许被 speech-/asr- 误吃。
+        assert_eq!(catalog_capability("MiniMax-M3.1-Flash"), Some("llm"));
+        assert_eq!(catalog_capability("MiniMax-M3"), Some("llm"));
+    }
+
+    /// ⚠️ **MiniMax 视频族**（端脑词表无 video 档 ⇒ 同 seedance/kling 归
+    /// image_gen；读面再归一）。
+    #[test]
+    fn minimax_video_family_lands_on_image_gen() {
+        assert_eq!(catalog_capability("MiniMax-Hailuo-2.3"), Some("image_gen"));
+        assert_eq!(catalog_capability("MiniMax-Hailuo-02"), Some("image_gen"));
+        // 命名空间形态。
+        assert_eq!(catalog_capability("MiniMax/Hailuo-2.3"), Some("image_gen"));
+        // 负控：H3-Image 仍是出图。
+        assert_eq!(catalog_capability("MiniMax-H3-Image"), Some("image_gen"));
+    }
+
+    /// ⚠️ **两层口径必须一致**（2026-11-15）：端脑的判据链是
+    /// 「出厂清单 → 族缀推断 → 兜底 llm」⇒ ⇒ **这条链的最终答案**才是
+    /// 用户在分档卡里看到的档 ⇒ ⇒ 钉这条链，别只钉某一层。
+    ///
+    /// ⚠️ 夹具一律用**真目录里真实存在的 id**（出厂清单的判据必须用真 id
+    /// 当夹具 —— 写不存在的 id，判据会绿成假象）。
+    #[test]
+    fn the_effective_capability_chain_agrees_with_the_expectations() {
+        let cases: &[(&str, &str)] = &[
+            // MiniMax 全族（裸 id）。
+            ("MiniMax-M3.1-Flash", "llm"),
+            ("MiniMax-M3", "llm"),
+            ("speech-2.8-hd", "tts"),
+            ("speech-02-turbo", "tts"),
+            ("asr-1.0", "asr"),
+            ("MiniMax/asr-1.0", "asr"),
+            ("image-01", "image_gen"),
+            ("MiniMax-H3-Image", "image_gen"),
+            ("MiniMax-H3", "image_gen"),
+            ("MiniMax-Hailuo-2.3", "image_gen"),
+            // 兄弟供应商的同类 id（不许被 minimax 的规则误吃）。
+            ("qwen3-tts-flash", "tts"),
+            ("qwen3-asr-flash-realtime", "asr"),
+            ("mimo-2.5-tts", "tts"),
+            ("mimo-2.5-asr", "asr"),
+            ("mimo-2.6", "llm"),
+        ];
+        for (id, expected) in cases {
+            let effective = effective_capability(id).unwrap_or("llm");
+            assert_eq!(effective, *expected, "effective capability of {id}");
+        }
     }
 
     /// ⚠️ **命名空间前缀是常态** —— 这条测试就是真机那 182 条的形状。

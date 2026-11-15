@@ -102,34 +102,55 @@ static PRESETS: &[ProviderPreset] = &[
         default_model: Some("deepseek-chat"),
         requires_key: true,
     },
+    // ⚠️ **MiniMax 两条按「区域」分，不按「模态」分**（2026-11-15）。
+    //
+    // 官方当前口径（`platform.minimaxi.com/docs/guides/quickstart-preparation.md`
+    // 与 `m-plan/other-tools.md`）：
+    //   * 国际站 → `https://api.minimax.io/v1`
+    //   * 国内站 → `https://api.minimax.cn/v1`（Anthropic 面同形：
+    //     `https://api.minimax.cn/anthropic`）
+    //
+    // ⇒ ⇒ 老预设的 `api.minimax.chat/v1`（国际老域）与
+    // `api.minimaxi.chat/v1`（国内老域）**都不是当前口径** ⇒ ⇒ 收掉。
+    //
+    // ⚠️ **默认模型也换了**：`MiniMax-Text-01` / `abab6.5s-chat` 都不在
+    // MiniMax 当前目录里（语言模型只有 `MiniMax-M3.1-Flash` / `MiniMax-M3`；
+    // M2.5/M2.7 已于 2026-11-18 下线）⇒ ⇒ 默认模型钉 `MiniMax-M3.1-Flash`。
+    //
+    // ⚠️ **老的 `minimax-abab` 预设退役**（模型已下线 + 域是老域）
+    // ⇒ ⇒ 存量条目自带 `api_base`（预设只管「新建时的默认」）⇒ ⇒ 不受影响。
     ProviderPreset {
         id: "minimax",
         name: "MiniMax",
-        base_url: "https://api.minimax.chat/v1",
+        base_url: "https://api.minimax.io/v1",
         api_standard: ApiStandard::OpenAi,
-        default_model: Some("MiniMax-Text-01"),
+        default_model: Some("MiniMax-M3.1-Flash"),
         requires_key: true,
     },
     ProviderPreset {
-        id: "minimax-abab",
-        name: "MiniMax ABAB",
-        base_url: "https://api.minimaxi.chat/v1",
+        id: "minimax-cn",
+        name: "MiniMax 中国",
+        base_url: "https://api.minimax.cn/v1",
         api_standard: ApiStandard::OpenAi,
-        default_model: Some("abab6.5s-chat"),
+        default_model: Some("MiniMax-M3.1-Flash"),
         requires_key: true,
     },
-    // ⚠️ **H3 是另立的预设，不改上面那两条**（2026-11-12）。
+    // ⚠️ **H3 仍是另立的一条，但理由换了**（2026-11-15 订正）。
     //
-    // 理由：H3 的域和路径跟老预设**不是同一个** —— 文档给的是
-    // `api.minimax.io/v1`（海外）/ `api.minimax.cn/v1`（国内），出图走
-    // `POST /v1/images/generations`（复数、OpenAI Images 兼容）；而老预设是
-    // `api.minimax.chat/v1`，老的 `image-01` 走的是单数
-    // `POST /v1/image_generation`。改老预设的 `base_url` 会把正在用它跑
-    // 对话的人一起打断 ⇒ ⇒ **新增一条**，老的照旧。
+    // 当初（2026-11-12）另立的理由是「**域不同**」：老预设在
+    // `api.minimax.chat/v1`，而 H3 的文档给的是 `api.minimax.io/v1` /
+    // `api.minimax.cn/v1`，出图走 `POST /v1/images/generations`（复数、
+    // OpenAI Images 兼容）⇒ ⇒ 不能改老预设的 base_url（会把正在用它跑对话
+    // 的人一起打断）。
     //
-    // ⚠️ 这条预设只负责「加得上、拉得到模型列表」；出图由端脑 images 门面
-    // 代理（`{base_url}/images/generations`）⇒ 与 H3 的路径重合。国内部署
-    // 把 base_url 换成 `https://api.minimax.cn/v1`。
+    // ⇒ ⇒ 现在 `minimax` 已经对齐到 `api.minimax.io/v1`（＝与本条同域）
+    // ⇒ ⇒ 「域不同」这条理由**不再成立**；保留本条的理由换成
+    // **默认模型**：它是出图模型（`MiniMax-H3-Image`），而 `minimax` 的
+    // 默认模型是对话模型（`MiniMax-M3.1-Flash`）。
+    //
+    // ⚠️ 出图由端脑 images 门面代理（`{base_url}/images/generations`）⇒ 与
+    // H3 的路径重合；国内部署用 `minimax-cn`（`https://api.minimax.cn/v1`，
+    // 同一套 `/v1` 形状）。
     ProviderPreset {
         id: "minimax-h3",
         name: "MiniMax H3（含出图）",
@@ -512,6 +533,13 @@ pub fn infer_capability(id: &str) -> Option<&'static str> {
     if has("tts") {
         return Some("tts");
     }
+    // ⚠️ **`speech-` 族**（2026-11-15）：MiniMax 的 TTS 真 id 就是
+    // `speech-2.8-hd` / `speech-02-turbo` / `speech-01-hd`
+    // ⇒ ⇒ 名字里**没有** `tts` 字样 ⇒ ⇒ 以前落 `None` ⇒ ⇒ 兜底成
+    // `llm` ⇒ ⇒ 分档卡的 tts 档永远看不见它。
+    if has("speech-") {
+        return Some("tts");
+    }
     if has("dall-e")
         || has("flux")
         || has("stable-diffusion")
@@ -530,7 +558,10 @@ pub fn infer_capability(id: &str) -> Option<&'static str> {
     {
         return Some("image_gen");
     }
-    if has("video-01") || has("seedance") || has("kling") {
+    // ⚠️ **MiniMax 的视频族**（2026-11-15）：`MiniMax-Hailuo-2.3` /
+    // `MiniMax-Hailuo-02` 是**视频**模型 ⇒ ⇒ 与 `seedance` / `kling`
+    // 同归 `video_gen`（端脑读面无 video 档 ⇒ 归一成 `image_gen`）。
+    if has("video-01") || has("seedance") || has("kling") || has("hailuo") {
         return Some("video_gen");
     }
     None
@@ -562,6 +593,52 @@ mod tests {
             if p.id != "anthropic" {
                 assert_eq!(p.api_standard, ApiStandard::OpenAi, "{}", p.id);
             }
+        }
+    }
+
+    /// ⚠️ **MiniMax 预设按区域分**（2026-11-15）—— 域与默认模型都钉住：
+    /// 官方当前口径是国际 `api.minimax.io/v1`、国内 `api.minimax.cn/v1`；
+    /// 默认模型钉 `MiniMax-M3.1-Flash`（老默认 `MiniMax-Text-01` 已不在
+    /// MiniMax 目录里）。
+    #[test]
+    fn minimax_presets_use_the_current_official_bases() {
+        let intl = find_preset("minimax").expect("minimax preset");
+        assert_eq!(intl.base_url, "https://api.minimax.io/v1");
+        assert_eq!(intl.default_model, Some("MiniMax-M3.1-Flash"));
+        assert!(intl.requires_key);
+
+        let cn = find_preset("minimax-cn").expect("minimax-cn preset");
+        assert_eq!(cn.base_url, "https://api.minimax.cn/v1");
+        assert_eq!(cn.default_model, Some("MiniMax-M3.1-Flash"));
+        assert!(cn.requires_key);
+
+        // H3 那条保留：它的**默认模型**是出图模型（理由已从「域不同」改成
+        // 「默认模型不同」——见预设处的注释）。
+        let h3 = find_preset("minimax-h3").expect("minimax-h3 preset");
+        assert_eq!(h3.base_url, "https://api.minimax.io/v1");
+        assert_eq!(h3.default_model, Some("MiniMax-H3-Image"));
+    }
+
+    /// ⚠️ **退役的 id 不再是预设**（老域 + 下线模型 abab6.5s-chat）
+    /// ⇒ ⇒ 存量条目自带 api_base（预设只管「新建时的默认」）⇒ ⇒ 不受影响。
+    #[test]
+    fn the_retired_minimax_abab_preset_is_gone() {
+        assert!(find_preset("minimax-abab").is_none());
+    }
+
+    /// ⚠️ **没有任何预设还指着退役的老域**（`api.minimax.chat` /
+    /// `api.minimaxi.chat`）—— 钉住「收老域」这个动作本身，
+    /// 免得下一个刀又把老域抄回来。
+    #[test]
+    fn no_preset_points_at_a_retired_minimax_domain() {
+        for p in presets() {
+            assert!(
+                !p.base_url.contains("api.minimax.chat")
+                    && !p.base_url.contains("api.minimaxi.chat"),
+                "{} still points at a retired MiniMax domain: {}",
+                p.id,
+                p.base_url
+            );
         }
     }
 
@@ -690,6 +767,21 @@ mod tests {
         // MiMo 的**对话**两兄弟不许被 asr/tts 词缀误吃。
         assert_eq!(infer_capability("mimo-2.6"), None);
         assert_eq!(infer_capability("mimo-2.5"), None);
+    }
+
+    /// ⚠️ **MiniMax 的语音/视频真 id**（2026-11-15）—— TTS 真 id 名字里
+    /// 没有 `tts` ⇒ ⇒ 以前落 `None` ⇒ ⇒ 兜底成 `llm`。
+    #[test]
+    fn minimax_voice_and_video_ids_are_recognized() {
+        assert_eq!(infer_capability("speech-2.8-hd"), Some("tts"));
+        assert_eq!(infer_capability("speech-02-turbo"), Some("tts"));
+        assert_eq!(infer_capability("asr-1.0"), Some("asr"));
+        // 视频族：与 seedance/kling 同归 video_gen（端脑读面无 video 档 ⇒
+        // 归一成 image_gen）。
+        assert_eq!(infer_capability("MiniMax-Hailuo-2.3"), Some("video_gen"));
+        // 负控：对话族不许被 speech-/hailuo- 误吃。
+        assert_eq!(infer_capability("MiniMax-M3.1-Flash"), None);
+        assert_eq!(infer_capability("MiniMax-M3"), None);
         // 认不出 ⇒ None —— 聊天模型一个都不许误标。
         assert_eq!(infer_capability("gpt-4o"), None);
         assert_eq!(infer_capability("deepseek-ai/DeepSeek-V3"), None);
