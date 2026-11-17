@@ -138,30 +138,23 @@ static PRESETS: &[ProviderPreset] = &[
         default_model: Some("MiniMax-M3.1-Flash"),
         requires_key: true,
     },
-    // ⚠️ **H3 仍是另立的一条，但理由换了**（2026-11-15 订正）。
+    // ⚠️ **`minimax-h3` 那条收掉了**（2026-11-16）—— 目录里的 MiniMax 只剩
+    // **两条**（国际 / 国内），按**区域**分（那是真的两条线：两套域、两套
+    // 计费、两种密钥）。
     //
-    // 当初（2026-11-12）另立的理由是「**域不同**」：老预设在
-    // `api.minimax.chat/v1`，而 H3 的文档给的是 `api.minimax.io/v1` /
-    // `api.minimax.cn/v1`，出图走 `POST /v1/images/generations`（复数、
-    // OpenAI Images 兼容）⇒ ⇒ 不能改老预设的 base_url（会把正在用它跑对话
-    // 的人一起打断）。
+    // 当初（2026-11-12）另立 H3 的理由是「域不同」⇒ ⇒ 2026-11-15 域对齐后
+    // 这条理由没了，换成「默认模型是出图模型」⇒ ⇒ **今天这条理由也没了**：
+    // 一条供应商本来就能有**多个模型**（默认模型只是其中一条）⇒ ⇒ 有了
+    // `preset_models`（按官方文档预设的模型清单）⇒ ⇒ `MiniMax-H3-Image`
+    // （出图）/ `MiniMax-H3`（视频）/ `speech-*`（语音）本来就列在 `minimax`
+    // 这条的清单里 ⇒ ⇒ 「为了出图再单开一条供应商」这件事**不再需要**。
     //
-    // ⇒ ⇒ 现在 `minimax` 已经对齐到 `api.minimax.io/v1`（＝与本条同域）
-    // ⇒ ⇒ 「域不同」这条理由**不再成立**；保留本条的理由换成
-    // **默认模型**：它是出图模型（`MiniMax-H3-Image`），而 `minimax` 的
-    // 默认模型是对话模型（`MiniMax-M3.1-Flash`）。
+    // ⇒ ⇒ 用户在**同一条** MiniMax 供应商里就能选到出图/视频/语音模型
+    // （能力分档卡按 capability 挑）⇒ ⇒ 而「云供应商里有三四个 MiniMax」
+    // 这件事**消失**。
     //
-    // ⚠️ 出图由端脑 images 门面代理（`{base_url}/images/generations`）⇒ 与
-    // H3 的路径重合；国内部署用 `minimax-cn`（`https://api.minimax.cn/v1`，
-    // 同一套 `/v1` 形状）。
-    ProviderPreset {
-        id: "minimax-h3",
-        name: "MiniMax H3（含出图）",
-        base_url: "https://api.minimax.io/v1",
-        api_standard: ApiStandard::OpenAi,
-        default_model: Some("MiniMax-H3-Image"),
-        requires_key: true,
-    },
+    // ⚠️ 存量条目**不受影响**（预设只管「新建时的默认」⇒ ⇒ 已经在用
+    // `minimax-h3` 的那台大脑，老条目自带 api_base / 默认模型 ⇒ 照旧）。
     ProviderPreset {
         id: "qwen",
         name: "通义千问",
@@ -278,6 +271,213 @@ pub fn find_preset(id: &str) -> Option<&'static ProviderPreset> {
     PRESETS.iter().find(|p| p.id == id)
 }
 
+/// 一条「**按官方文档预设**的模型」—— 上游**没有模型列表接口**时的兜底。
+///
+/// ⚠️ **为什么要有这张表**（2026-11-16 实测取证）：
+/// 有的上游**压根不提供**「模型列表」这个接口（Google 的 OpenAI 兼容面
+/// `GET /v1beta/openai/models` ⇒ 404；百度千帆 `GET /v2/models` ⇒ 302）
+/// ⇒ ⇒ 「拉模型列表」这一格对它们**永远失败** ⇒ ⇒ 界面永远显示「尚未
+/// 获取」⇒ ⇒ 「配得出来、用不起来」（失败长得像成功）。
+///
+/// ⇒ ⇒ 这张表按**各家的官方接口文档**把模型名抄下来 ⇒ ⇒ 拉不到时回落
+/// 成它 ⇒ ⇒ 用户至少能选到一个**真模型**。
+///
+/// ⚠️ **只写文档里真有的 id** —— 抄错的 id 会让用户撞「模型不存在」，
+/// 那比「没有清单」更坏 ⇒ ⇒ 取不到官方文档就**不填**（宁可没有，不编）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PresetModel {
+    /// 模型 id（**原样** —— 含大小写、点号、连字符）。
+    pub id: &'static str,
+    /// 能力（llm / asr / tts / embedding / vision / rerank / ocr /
+    /// image_gen / video_gen）。
+    pub capability: &'static str,
+}
+
+/// 一个预设的「按官方文档预设的模型清单」＋**出处**。
+///
+/// ⚠️ **为什么是 `pub`**（2026-11-16）：读面要按**厂商**挑清单（见
+/// `preset_doc_list`）⇒ ⇒ 挑中之后得把「预设 id ＋ 文档出处 ＋ 清单」
+/// **一起**带走 ⇒ ⇒ 只给一个清单切片的话，调用方还得再查一次 ⇒ ⇒ 两处口径。
+#[derive(Debug, Clone, Copy)]
+pub struct PresetDocList {
+    pub preset_id: &'static str,
+    /// 官方文档地址（界面要能说「这是按哪份文档预设的」）。
+    pub doc: &'static str,
+    pub models: &'static [PresetModel],
+}
+
+/// MiniMax 的官方模型清单（国际站 / 国内站**同一份**）。
+///
+/// ⚠️ 出处：`https://platform.minimaxi.com/docs/faq/models.md`（官方「模型
+/// 列表」页，2026-11-16 取）⇒ ⇒ 逐字抄的**可用**模型；已下线的 M2.x /
+/// music-* **不在表里**（抄进去就是「默认拿死模型当默认」的老毛病）。
+static MINIMAX_MODELS: &[PresetModel] = &[
+    PresetModel { id: "MiniMax-M3.1-Flash", capability: "llm" },
+    PresetModel { id: "MiniMax-M3", capability: "llm" },
+    PresetModel { id: "MiniMax-H3", capability: "video_gen" },
+    PresetModel { id: "MiniMax-Hailuo-2.3", capability: "video_gen" },
+    PresetModel { id: "MiniMax-Hailuo-2.3-Fast", capability: "video_gen" },
+    PresetModel { id: "MiniMax-Hailuo-02", capability: "video_gen" },
+    PresetModel { id: "MiniMax-H3-Image", capability: "image_gen" },
+    PresetModel { id: "image-01", capability: "image_gen" },
+    PresetModel { id: "image-01-live", capability: "image_gen" },
+    PresetModel { id: "speech-2.8-hd", capability: "tts" },
+    PresetModel { id: "speech-2.8-turbo", capability: "tts" },
+    PresetModel { id: "speech-2.6-hd", capability: "tts" },
+    PresetModel { id: "speech-2.6-turbo", capability: "tts" },
+    PresetModel { id: "speech-02-hd", capability: "tts" },
+    PresetModel { id: "speech-02-turbo", capability: "tts" },
+];
+
+/// 预设 ⇒ 官方文档里的模型清单（**兜底用**，不是「实时拉的」）。
+///
+/// ⚠️ 键是**预设 id**（不是供应商名）⇒ ⇒ 清单跟着预设走 ⇒ ⇒ 用户把
+/// base URL 改成别家时，这张表**不会被误用**。
+static PRESET_DOC_LISTS: &[PresetDocList] = &[
+    PresetDocList {
+        preset_id: "minimax",
+        doc: "https://platform.minimaxi.com/docs/faq/models.md",
+        models: MINIMAX_MODELS,
+    },
+    PresetDocList {
+        preset_id: "minimax-cn",
+        doc: "https://platform.minimaxi.com/docs/faq/models.md",
+        models: MINIMAX_MODELS,
+    },
+    PresetDocList {
+        preset_id: "gemini",
+        doc: "https://ai.google.dev/gemini-api/docs/models/gemini",
+        models: &[
+            PresetModel { id: "gemini-2.5-pro", capability: "llm" },
+            PresetModel { id: "gemini-2.5-flash", capability: "llm" },
+            PresetModel { id: "gemini-2.5-flash-lite", capability: "llm" },
+            PresetModel { id: "gemini-3-flash-preview", capability: "llm" },
+            PresetModel { id: "gemini-3.8-flash", capability: "llm" },
+            PresetModel { id: "gemini-3.6-flash", capability: "llm" },
+            PresetModel { id: "gemini-3.5-flash-lite", capability: "llm" },
+            PresetModel { id: "gemini-3.1-flash-lite", capability: "llm" },
+            PresetModel { id: "gemini-4-argon", capability: "llm" },
+            PresetModel { id: "gemini-4-carbon", capability: "llm" },
+            PresetModel { id: "gemini-4-hydrogen", capability: "llm" },
+            PresetModel { id: "gemini-omni-flash", capability: "llm" },
+            PresetModel { id: "gemini-2.5-flash-image", capability: "image_gen" },
+            PresetModel { id: "gemini-3-pro-image", capability: "image_gen" },
+            PresetModel { id: "gemini-3.1-flash-image", capability: "image_gen" },
+            PresetModel { id: "gemini-3.5-transcribe", capability: "asr" },
+            PresetModel { id: "gemini-3.8-flash-tts", capability: "tts" },
+            PresetModel { id: "gemini-3.8-flash-lite-tts", capability: "tts" },
+        ],
+    },
+    PresetDocList {
+        preset_id: "qianfan",
+        doc: "https://ai.baidu.com/ai-doc/WENXINWORKSHOP/4mchtzl8s",
+        models: &[
+            PresetModel { id: "ernie-4.5-turbo-128k-preview", capability: "llm" },
+            PresetModel { id: "ernie-4.5-turbo-vl-preview", capability: "llm" },
+            PresetModel { id: "ernie-4.5-vl-28b-a3b", capability: "llm" },
+            PresetModel { id: "ernie-4.5-21b-a3b", capability: "llm" },
+            PresetModel { id: "ernie-4.5-0.3b", capability: "llm" },
+        ],
+    },
+];
+
+/// 某个预设的「按官方文档预设的模型清单」—— 没有 ⇒ `None`。
+///
+/// ⚠️ **这不是「实时拉的可用模型」** —— 它是**按官方文档抄的目录**，
+/// 用在「上游没有列表接口 / 拉列表失败」的那一格 ⇒ ⇒ 调用方必须把
+/// 来源标出来（不许让人以为这是实时结果）。
+pub fn preset_models(preset_id: &str) -> Option<&'static [PresetModel]> {
+    PRESET_DOC_LISTS
+        .iter()
+        .find(|d| d.preset_id == preset_id)
+        .map(|d| d.models)
+}
+
+/// 清单的**官方文档出处** —— 界面要能说「这是按哪份文档预设的」。
+pub fn preset_models_doc(preset_id: &str) -> Option<&'static str> {
+    PRESET_DOC_LISTS
+        .iter()
+        .find(|d| d.preset_id == preset_id)
+        .map(|d| d.doc)
+}
+
+/// **官方域** ⇒ 预设 id —— **只登记官方域**。
+///
+/// ⚠️ **为什么要有这张表**（2026-11-16）：这份清单说的是**这家上游**有哪些
+/// 模型 ⇒ ⇒ 归属得由**主机名**说了算（不是由「用户挑了哪个预设」说了算）
+/// ⇒ ⇒ **自定义条目**只要指向官方域 ⇒ ⇒ 也认得 ⇒ ⇒ 否则「自己手填
+/// `api.minimax.cn` 的那条」永远拿不到出图／视频／语音那几档。
+///
+/// ⚠️ **老域也登记**（`api.minimax.chat` / `api.minimaxi.com`）：它们**不是
+/// 当前口径**（新建不再用）⇒ ⇒ 但**存量条目**还指着它 ⇒ ⇒ 它仍然是**同一家
+/// 厂商** ⇒ ⇒ 清单照样认（不认 ⇒ 存量条目的兜底就没了）。
+static OFFICIAL_HOSTS: &[(&str, &str)] = &[
+    ("api.minimax.io", "minimax"),
+    ("api.minimax.chat", "minimax"),
+    ("api.minimax.cn", "minimax-cn"),
+    ("api.minimaxi.com", "minimax-cn"),
+    ("generativelanguage.googleapis.com", "gemini"),
+    ("aip.baidubce.com", "qianfan"),
+];
+
+/// base URL 的**主机名**（小写、去端口）—— 认厂商用。
+///
+/// ⚠️ **只认主机名**（不看路径）⇒ ⇒ `https://api.minimax.cn/v1` 与
+/// `https://api.minimax.cn` 是**同一家** ⇒ ⇒ 少写一个 `/v1` 不会失配。
+pub fn base_host(base_url: &str) -> Option<String> {
+    let rest = base_url.split_once("://").map(|(_, r)| r).unwrap_or(base_url);
+    let host = rest.split(['/', '?', '#']).next()?;
+    let host = host.rsplit_once(':').map(|(h, _)| h).unwrap_or(host);
+    let host = host.trim().to_ascii_lowercase();
+    if host.is_empty() {
+        None
+    } else {
+        Some(host)
+    }
+}
+
+/// 这条供应商该配哪份「按官方文档预设的清单」—— 认厂商，**两层**。
+///
+/// ⚠️ **① 主机名优先**：这份清单说的是**这家上游** ⇒ ⇒ 归属由主机名说了算
+/// ⇒ ⇒ 「用户挑了 MiniMax 预设、却把地址改成别家」也不会被抄错清单 ⇒ ⇒
+/// 也不会把 A 家的模型抄给 B 家。
+/// ⚠️ **② 预设 id 兜底**：主机名认不出（自建代理／镜像站／老域）⇒ ⇒ 用户挑
+/// 的那个预设说了算。
+pub fn preset_doc_list(
+    preset_id: Option<&str>,
+    base_url: Option<&str>,
+) -> Option<&'static PresetDocList> {
+    if let Some(host) = base_url.and_then(base_host) {
+        if let Some((_, pid)) = OFFICIAL_HOSTS.iter().find(|(h, _)| *h == host) {
+            if let Some(list) = PRESET_DOC_LISTS.iter().find(|d| d.preset_id == *pid) {
+                return Some(list);
+            }
+        }
+    }
+    let pid = preset_id?;
+    PRESET_DOC_LISTS.iter().find(|d| d.preset_id == pid)
+}
+
+/// 清单里**上游没列**的那些条目 —— 读面拿它把上游那份**补齐**。
+///
+/// ⚠️ **为什么要补**（2026-11-16）：有的上游的「模型列表」接口**只列对话
+/// 模型** —— MiniMax 的 `GET /v1/models` 逐字只给 `MiniMax-M3.1-Flash` /
+/// `MiniMax-M3` ⇒ ⇒ 出图 `MiniMax-H3-Image` / 视频 `MiniMax-H3` / 语音
+/// `speech-*` **压根不在那个列表里**（它们走各自端点）⇒ ⇒ 刷新一次 ⇒ ⇒
+/// 清单被**整份替换** ⇒ ⇒ 那几档**消失** ⇒ ⇒ 「按能力分档」里那些档**空着**。
+///
+/// ⚠️ **按 id 比**（不是按顺序、不是按能力）⇒ ⇒ 上游已经列了的那条**不重复**
+/// ⇒ ⇒ 上游将来把出图模型也列进那个接口 ⇒ ⇒ 这里自动就不补了。
+pub fn preset_models_missing(
+    list: &PresetDocList,
+    upstream_ids: &[String],
+) -> Vec<&'static PresetModel> {
+    list.models
+        .iter()
+        .filter(|m| !upstream_ids.iter().any(|id| id == m.id))
+        .collect()
+}
+
 /// One entry of a provider's model list.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModelSummary {
@@ -314,6 +514,31 @@ pub struct ModelSummary {
     /// ⚠️ **只有端脑的读面会填**（它算五档判据）⇒ ⇒ 目录/解析路径留 `None`。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capability_source: Option<String>,
+    /// ⚠️ **输入模态**（`text` / `image` / `audio` / `video` / `pdf`）——
+    /// 2026-11-16 加。
+    ///
+    /// ⚠️ 为什么必须带：只给能力档（`llm`）⇒ ⇒ 用户**看不出这条模型吃什么**
+    /// ⇒ ⇒ 「能不能传图」只能猜 ⇒ ⇒ 猜错就是「界面说一套、实际报 400」。
+    ///
+    /// ⚠️ **空 ＝ 不知道**（**不是**「只能吃文本」）⇒ ⇒ 界面不乱画。
+    #[serde(default)]
+    pub input_modalities: Vec<String>,
+    /// 这份模态**从哪来**（`upstream` / `catalog` / `default`）—— 2026-11-16 加。
+    ///
+    /// ⚠️ 只给最终模态、不说来源 ⇒ ⇒ 「上游真给的」与「我们按官方文档预设的」
+    /// 在界面上长得一样 ⇒ ⇒ 猜错了没人发现。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_modalities_source: Option<String>,
+    /// ⚠️ **这条条目从哪来**（`upstream` / `preset`）—— 2026-11-16 加。
+    ///
+    /// ⚠️ 为什么必须带：上游的「模型列表」**只列对话模型**（MiniMax 的
+    /// `GET /v1/models` 逐字只给两条语言模型 ⇒ ⇒ 出图／视频／语音模型是
+    /// **读面按官方文档补进来的**）⇒ ⇒ 不标来源 ⇒ ⇒ 界面把它们说成「实时
+    /// 拉的」⇒ ⇒ **来源标签说谎**。
+    ///
+    /// ⚠️ **只有读面会填**（合并那一步才分得出）⇒ ⇒ 解析路径留 `None`。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_source: Option<String>,
 }
 
 /// Errors from [`list_models`].
@@ -414,25 +639,101 @@ pub async fn list_models(
     }
 }
 
+/// 一条上游模型（**两个标准共用**）—— 字段全可选 ⇒ ⇒ 上游少给哪个
+/// 字段都**不炸**（各家的形状漂移很多）。
+#[derive(Deserialize)]
+struct RawModel {
+    id: String,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    created: Option<u64>,
+    #[serde(default)]
+    context_window: Option<u64>,
+    #[serde(default)]
+    context_length: Option<u64>,
+    #[serde(default)]
+    max_context_length: Option<u64>,
+    /// ⚠ **上游真给的输入模态**（2026-11-16）—— 三种形状都认。
+    ///
+    /// ⚠ **以前目录层整块没读** ⇒ ⇒ `architecture.input_modalities`
+    /// （OpenRouter 的真形状）在解析层就被**丢了** ⇒ ⇒ 上游真值到不了
+    /// 界面 ⇒ ⇒ 来源标签会假装成「按文档预设的」（**来源标签说谎**）。
+    #[serde(default)]
+    architecture: Option<RawArchitecture>,
+    #[serde(default)]
+    input_modalities: Option<Vec<String>>,
+    #[serde(default)]
+    modalities: Option<RawModalities>,
+}
+
+/// 上游的 `architecture` 那一块（**OpenRouter 的模态就长在这儿**）。
+#[derive(Deserialize)]
+struct RawArchitecture {
+    #[serde(default)]
+    input_modalities: Option<Vec<String>>,
+}
+
+/// 上游的 `modalities` 那一块（另一种形状：`modalities.input`）。
+#[derive(Deserialize)]
+struct RawModalities {
+    #[serde(default)]
+    input: Option<Vec<String>>,
+}
+
+/// 这条模型**上游说的**输入模态（原值，三种形状都认 —— 口径与端脑写面
+/// **同一套**，见 `input_modalities::pick_upstream_modalities`）。
+fn upstream_modalities(m: &RawModel) -> Vec<String> {
+    super::input_modalities::pick_upstream_modalities(
+        &m.architecture
+            .as_ref()
+            .and_then(|a| a.input_modalities.clone())
+            .unwrap_or_default(),
+        &m.input_modalities.clone().unwrap_or_default(),
+        &m.modalities
+            .as_ref()
+            .and_then(|x| x.input.clone())
+            .unwrap_or_default(),
+    )
+}
+
+/// 这条模型的**输入模态**（**上游真值优先** ⇒ ⇒ 出厂清单 ⇒ ⇒ 留空）。
+///
+/// ⚠ **上游真值优先**（2026-11-16）：上游说了就照抄 ⇒ ⇒ 来源标
+/// `upstream`；上游没说 ⇒ ⇒ 走出厂清单（来源 `catalog`）；都没有 ⇒ ⇒
+/// **留空**（**不许**填兜底 `text` —— 那是**端脑读面**三档判据的第三档，
+/// 目录层不许替它做 ⇒ ⇒ 否则来源标签会说谎）。
+///
+/// ⚠ 归一（`file` ⇒ `pdf`）在**这里**做 ⇒ ⇒ 词表是封闭的 5 档 ⇒ ⇒
+/// 客户端拿到就能直接显示（盘上那份**存原值**、由读面归一 —— 两个形状
+/// 各司其职）。
+fn effective_input_modalities(
+    model_id: &str,
+    upstream: Vec<String>,
+) -> (Vec<String>, Option<String>) {
+    let normalized: Vec<String> = upstream
+        .iter()
+        .filter_map(|w| super::input_modalities::normalize_modality(w))
+        .map(|w| w.to_string())
+        .collect();
+    if !normalized.is_empty() {
+        return (normalized, Some("upstream".to_string()));
+    }
+    if let Some(list) = super::input_modalities::catalog_input_modalities(model_id) {
+        return (
+            list.iter().map(|w| w.to_string()).collect(),
+            Some("catalog".to_string()),
+        );
+    }
+    // ⚠ 都不知道 ⇒ ⇒ **留空 ＝ 不知道**（**不是**「只能吃文本」）。
+    (Vec::new(), None)
+}
+
 /// Parse an OpenAI-standard `{"data": [...]}` models response.
 ///
 /// Tolerates the field drift across OpenAI-compatible vendors: context
 /// length appears as `context_window` / `context_length` / `max_context_length`.
 pub fn parse_openai_models(body: &str) -> Result<Vec<ModelSummary>, ModelListError> {
-    #[derive(Deserialize)]
-    struct RawModel {
-        id: String,
-        #[serde(default)]
-        display_name: Option<String>,
-        #[serde(default)]
-        created: Option<u64>,
-        #[serde(default)]
-        context_window: Option<u64>,
-        #[serde(default)]
-        context_length: Option<u64>,
-        #[serde(default)]
-        max_context_length: Option<u64>,
-    }
     #[derive(Deserialize)]
     struct RawList {
         #[serde(default)]
@@ -447,6 +748,11 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
         .map(|m| {
             // ⚠️ 名字自己说清模态的那一族 ⇒ 保守推断；认不出 ⇒ None（不知道）。
             let capability = infer_capability(&m.id);
+            // ⚠️ **输入模态**：**上游真值优先**（2026-11-16）—— 上游说了
+            // 就照抄（归一后）⇒ ⇒ 来源标 `upstream`；上游没说 ⇒ ⇒ 走
+            // 出厂清单（来源 `catalog`）；都没有 ⇒ ⇒ **留空**。
+            let (modalities, modality_source) =
+                effective_input_modalities(&m.id, upstream_modalities(&m));
             ModelSummary {
                 display_name: Some(m.display_name.unwrap_or_else(|| last_segment(&m.id))),
                 context_length: m
@@ -459,6 +765,11 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
                 available: None,
                 // 目录解析路径不判来源（端脑读面才判五档）。
                 capability_source: None,
+                input_modalities: modalities,
+                input_modalities_source: modality_source,
+                // ⚠️ 目录解析路径**不判条目来源**（读面合并时才分得出哪条是
+                // 上游列的、哪条是按文档补的）⇒ ⇒ 这里留空。
+                model_source: None,
             }
         })
         .collect())
@@ -466,12 +777,6 @@ pub fn parse_openai_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
 
 /// Parse an Anthropic-standard `{"data": [...], "has_more": bool}` response.
 pub fn parse_claude_models(body: &str) -> Result<Vec<ModelSummary>, ModelListError> {
-    #[derive(Deserialize)]
-    struct RawModel {
-        id: String,
-        #[serde(default)]
-        display_name: Option<String>,
-    }
     #[derive(Deserialize)]
     struct RawList {
         #[serde(default)]
@@ -486,6 +791,10 @@ pub fn parse_claude_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
         .map(|m| {
             // ⚠️ 同一条推断（Anthropic 目录里今天只有聊天模型 ⇒ 推断多半 None）。
             let capability = infer_capability(&m.id);
+            // ⚠️ **输入模态**：同一条判据（**上游真值优先** ⇒ ⇒ 出厂清单
+            // ⇒ ⇒ 留空）—— 认不出 ⇒ ⇒ 界面说「不知道」。
+            let (modalities, modality_source) =
+                effective_input_modalities(&m.id, upstream_modalities(&m));
             ModelSummary {
                 display_name: Some(m.display_name.unwrap_or_else(|| m.id.clone())),
                 id: m.id,
@@ -495,6 +804,11 @@ pub fn parse_claude_models(body: &str) -> Result<Vec<ModelSummary>, ModelListErr
                 available: None,
                 // 目录解析路径不判来源（端脑读面才判五档）。
                 capability_source: None,
+                input_modalities: modalities,
+                input_modalities_source: modality_source,
+                // ⚠️ 目录解析路径**不判条目来源**（读面合并时才分得出哪条是
+                // 上游列的、哪条是按文档补的）⇒ ⇒ 这里留空。
+                model_source: None,
             }
         })
         .collect())
@@ -543,6 +857,13 @@ pub fn infer_capability(id: &str) -> Option<&'static str> {
     if has("speech-") {
         return Some("tts");
     }
+    // ⚠️ **裸 `MiniMax-H3` 是视频模型**（2026-11-16）—— 它与出图模型
+    // `MiniMax-H3-Image` **只差一个后缀** ⇒ ⇒ 下面那条 contains 口径
+    // （`has("minimax-h3")`）会把它**误吃成出图** ⇒ ⇒ 这里**先**按
+    // **精确 id**判（命名空间形态一并）⇒ ⇒ 视频模型不再被出图规则吃掉。
+    if id == "minimax-h3" || id == "minimax/h3" || id.ends_with("/minimax-h3") {
+        return Some("video_gen");
+    }
     if has("dall-e")
         || has("flux")
         || has("stable-diffusion")
@@ -563,7 +884,7 @@ pub fn infer_capability(id: &str) -> Option<&'static str> {
     }
     // ⚠️ **MiniMax 的视频族**（2026-11-15）：`MiniMax-Hailuo-2.3` /
     // `MiniMax-Hailuo-02` 是**视频**模型 ⇒ ⇒ 与 `seedance` / `kling`
-    // 同归 `video_gen`（端脑读面无 video 档 ⇒ 归一成 `image_gen`）。
+    // 同归 `video_gen`（2026-11-16 起端脑有第 10 档 `video_gen` ⇒ ⇒ **不再**折成 `image_gen`）。
     if has("video-01") || has("seedance") || has("kling") || has("hailuo") {
         return Some("video_gen");
     }
@@ -615,11 +936,10 @@ mod tests {
         assert_eq!(cn.default_model, Some("MiniMax-M3.1-Flash"));
         assert!(cn.requires_key);
 
-        // H3 那条保留：它的**默认模型**是出图模型（理由已从「域不同」改成
-        // 「默认模型不同」——见预设处的注释）。
-        let h3 = find_preset("minimax-h3").expect("minimax-h3 preset");
-        assert_eq!(h3.base_url, "https://api.minimax.io/v1");
-        assert_eq!(h3.default_model, Some("MiniMax-H3-Image"));
+        // ⚠️ **H3 不再另立一条**（2026-11-16）：出图/视频/语音模型进
+        // `minimax` 这条的**官方文档清单** ⇒ ⇒ 目录里的 MiniMax 只有两条
+        // （国际 / 国内）⇒ ⇒ 「云供应商里有三四个 MiniMax」这件事消失。
+        assert!(find_preset("minimax-h3").is_none());
     }
 
     /// ⚠️ **退役的 id 不再是预设**（老域 + 下线模型 abab6.5s-chat）
@@ -627,6 +947,82 @@ mod tests {
     #[test]
     fn the_retired_minimax_abab_preset_is_gone() {
         assert!(find_preset("minimax-abab").is_none());
+    }
+
+    /// ⚠️ **目录里的 MiniMax 只有两条**（2026-11-16）—— 按**区域**分是
+    /// 真的两条线（两套域 / 两套计费 / 两种密钥）⇒ ⇒ 保留；
+    /// 而 H3 曾经另立一条（理由先「域不同」后「默认模型不同」）⇒ ⇒
+    /// 两条理由都不成立了就收掉 ⇒ ⇒ 「三四个 MiniMax」这件事消失。
+    #[test]
+    fn the_catalog_has_exactly_two_minimax_presets() {
+        let ids: Vec<&str> = presets()
+            .iter()
+            .filter(|p| p.id.contains("minimax"))
+            .map(|p| p.id)
+            .collect();
+        assert_eq!(ids, vec!["minimax", "minimax-cn"]);
+    }
+
+    /// ⚠️ **收掉 H3 那条 ≠ 把出图能力一起收掉**（2026-11-16）—— 出图 /
+    /// 视频 / 语音模型必须**在** MiniMax 那条的**官方文档清单**里
+    /// ⇒ ⇒ 否则「去重」就变成了「删功能」。
+    #[test]
+    fn the_minimax_doc_list_carries_the_image_video_and_voice_models() {
+        let models = preset_models("minimax").expect("minimax doc list");
+        let ids: Vec<&str> = models.iter().map(|m| m.id).collect();
+        assert!(ids.contains(&"MiniMax-H3-Image"), "image model missing");
+        assert!(ids.contains(&"MiniMax-H3"), "video model missing");
+        assert!(ids.contains(&"speech-2.8-hd"), "tts model missing");
+        // ⚠️ **默认模型必须在清单里** —— 不在 ⇒ 用户新建完供应商，第一次
+        // 调用就是「模型不存在」（配得出来、用不起来）。
+        let def = find_preset("minimax")
+            .expect("minimax preset")
+            .default_model
+            .expect("minimax default model");
+        assert!(ids.contains(&def), "default model not in the doc list: {}", def);
+        // 国内站同一份清单（同一套模型线）。
+        assert_eq!(
+            preset_models("minimax-cn").map(|m| m.len()),
+            Some(models.len())
+        );
+        // 出处必须是官方文档地址（不许「来源不明」）。
+        let doc = preset_models_doc("minimax").expect("doc source");
+        assert!(
+            doc.starts_with("https://platform.minimaxi.com/"),
+            "not an official doc url: {}",
+            doc
+        );
+    }
+
+    /// ⚠️ **已下线的模型不许进清单** —— MiniMax 官方「模型列表」页把
+    /// M2.x / music-* 列在「**历史模型**」里 ⇒ ⇒ 抄进清单就是「拿死模型
+    /// 当默认」的老毛病 ⇒ ⇒ 负控钉住。
+    #[test]
+    fn retired_models_never_enter_the_doc_list() {
+        let models = preset_models("minimax").expect("minimax doc list");
+        for m in models {
+            assert!(!m.id.contains("M2"), "retired model in list: {}", m.id);
+            assert!(
+                !m.id.to_lowercase().contains("music"),
+                "retired model in list: {}",
+                m.id
+            );
+            assert!(!m.id.contains("abab"), "retired model in list: {}", m.id);
+        }
+    }
+
+    /// ⚠️ **没登记的预设就说「没有」** —— 清单不许瞎填（编出来的 id
+    /// 会让用户撞「模型不存在」）⇒ ⇒ `None` 是合法答案。
+    #[test]
+    fn a_preset_without_a_doc_list_says_so() {
+        assert!(preset_models("openai").is_none());
+        assert!(preset_models("nope").is_none());
+        assert!(preset_models_doc("openai").is_none());
+        // 登记过的那几条，出处与清单都要在。
+        for id in ["minimax", "minimax-cn", "gemini", "qianfan"] {
+            assert!(preset_models(id).is_some(), "{} lost its doc list", id);
+            assert!(preset_models_doc(id).is_some(), "{} lost its doc source", id);
+        }
     }
 
     /// ⚠️ **没有任何预设还指着退役的老域**（`api.minimax.chat` /
@@ -783,8 +1179,8 @@ mod tests {
         assert_eq!(infer_capability("speech-2.8-hd"), Some("tts"));
         assert_eq!(infer_capability("speech-02-turbo"), Some("tts"));
         assert_eq!(infer_capability("asr-1.0"), Some("asr"));
-        // 视频族：与 seedance/kling 同归 video_gen（端脑读面无 video 档 ⇒
-        // 归一成 image_gen）。
+        // 视频族：与 seedance/kling 同归 video_gen（端脑 2026-11-16 起有
+        // 第 10 档 `video_gen` ⇒ ⇒ 不再归一成 image_gen）。
         assert_eq!(infer_capability("MiniMax-Hailuo-2.3"), Some("video_gen"));
         // 负控：对话族不许被 speech-/hailuo- 误吃。
         assert_eq!(infer_capability("MiniMax-M3.1-Flash"), None);
@@ -914,5 +1310,151 @@ mod tests {
             ModelListError::Status(401, body) => assert!(body.contains("bad key")),
             other => panic!("expected Status(401), got {:?}", other),
         }
+    }
+
+    /// ⚠️ **真上游夹具**（2026-11-16）—— 这段 JSON 是**从 OpenRouter
+    /// 的真响应里摘的**（`GET https://openrouter.ai/api/v1/models`，
+    /// 2026-11-16 取）⇒ ⇒ 钉的是「上游的 `architecture.input_modalities`
+    /// 真会被读」⇒ ⇒ **不用自造形状**（自造的形状会把「上游换了字段名」
+    /// 藏起来）。
+    ///
+    /// ⚠️ **来源要说对**：上游说 text,image,file ⇒ ⇒ 归一后
+    /// text,image,**pdf** ⇒ ⇒ 而**出厂清单**对 claude/gpt-4o 只说
+    /// text,image（**少一档**）⇒ ⇒ 两边**不一样** ⇒ ⇒ 这条判据**有牙**
+    /// （要是读的是出厂清单就红）。
+    #[test]
+    fn the_real_openrouter_modalities_win_over_the_catalog() {
+        let body = r#"{"data":[
+{"id":"google/gemini-4-hydrogen","context_length":1048576,"architecture":{"input_modalities":["audio","file","image","text","video"],"output_modalities":["text"],"modality":"text+image+file+audio+video->text"}},
+{"id":"anthropic/claude-sonnet-4.5","context_length":1000000,"architecture":{"input_modalities":["text","image","file"],"output_modalities":["text"]}},
+{"id":"openai/gpt-4o-mini","context_length":128000,"architecture":{"input_modalities":["text","image","file"],"output_modalities":["text"]}},
+{"id":"totally-unknown-model-xyz","context_length":1000}
+]}"#;
+        let models = parse_openai_models(body).expect("真上游那段的形状要能解析");
+        assert_eq!(models.len(), 4);
+        // ❶ Gemini 4：上游五档 ⇒ ⇒ 归一后 **file ⇒ pdf** ⇒ ⇒ 顺序照上游
+        // （出厂清单那份的顺序不一样 ⇒ ⇒ 顺序本身就是判据）。
+        let g = &models[0];
+        assert_eq!(g.id, "google/gemini-4-hydrogen");
+        assert_eq!(
+            g.input_modalities,
+            vec!["audio", "pdf", "image", "text", "video"]
+        );
+        assert_eq!(g.input_modalities_source.as_deref(), Some("upstream"));
+        // ❷ Claude：上游 text,image,file ⇒ ⇒ **pdf**（出厂清单只说 text,image）。
+        let c = &models[1];
+        assert_eq!(c.input_modalities, vec!["text", "image", "pdf"]);
+        assert_eq!(c.input_modalities_source.as_deref(), Some("upstream"));
+        // ❸ gpt-4o-mini：同上（出厂清单只说 text,image ⇒ 少 pdf）。
+        let o = &models[2];
+        assert_eq!(o.input_modalities, vec!["text", "image", "pdf"]);
+        assert_eq!(o.input_modalities_source.as_deref(), Some("upstream"));
+        // ❹ 上游没说 ＋ 出厂清单也不认识 ⇒ ⇒ **留空 ＝ 不知道**
+        // （**不是**「只能吃文本」⇒ ⇒ 界面不许瞎画）。
+        let u = &models[3];
+        assert!(u.input_modalities.is_empty());
+        assert_eq!(u.input_modalities_source, None);
+    }
+
+    /// ⚠️ **上游说了不算数的词 ⇒ ⇒ 走出厂清单**（2026-11-16）——
+    /// 上游可能把「能力」混进模态字段（`tools` / `function_calling`）
+    /// ⇒ ⇒ 认不出的词**不算模态**⇒ ⇒ 不许拿它当「上游真给了」。
+    #[test]
+    fn an_upstream_word_we_do_not_know_falls_back_to_the_catalog() {
+        let body = r#"{"data":[
+{"id":"anthropic/claude-sonnet-4.5","architecture":{"input_modalities":["tools"]}},
+{"id":"totally-unknown-model-xyz","architecture":{"input_modalities":["tools"]}}
+]}"#;
+        let models = parse_openai_models(body).unwrap();
+        // ❶ 出厂清单认得 ⇒ ⇒ 走清单（来源 `catalog`）。
+        assert_eq!(models[0].input_modalities, vec!["text", "image"]);
+        assert_eq!(models[0].input_modalities_source.as_deref(), Some("catalog"));
+        // ❷ 谁都不认得 ⇒ ⇒ **留空**（不填兜底 `text`）。
+        assert!(models[1].input_modalities.is_empty());
+        assert_eq!(models[1].input_modalities_source, None);
+    }
+
+    /// ⚠️ **认厂商：主机名优先，预设 id 兜底**（2026-11-16）—— 这份清单说的
+    /// 是**这家上游**有哪些模型 ⇒ ⇒ 归属由主机名说了算 ⇒ ⇒ **自定义条目**只要
+    /// 指向官方域也认得（否则「自己手填 `api.minimax.cn` 的那条」永远拿不到
+    /// 出图／视频／语音那几档）。
+    #[test]
+    fn the_vendor_is_recognized_by_the_host_name_first() {
+        // ❶ 官方域 ⇒ 认得（**没有 preset_id 也认**）。
+        let cn = preset_doc_list(None, Some("https://api.minimax.cn/v1")).expect("minimax cn");
+        assert_eq!(cn.preset_id, "minimax-cn");
+        // ❷ 国际域。
+        let io = preset_doc_list(None, Some("https://api.minimax.io/v1")).expect("minimax io");
+        assert_eq!(io.preset_id, "minimax");
+        // ❸ **主机名认不出**（自建代理）⇒ ⇒ 退回**预设 id**。
+        let proxy = preset_doc_list(Some("minimax-cn"), Some("http://127.0.0.1:8080/v1"))
+            .expect("fallback to preset id");
+        assert_eq!(proxy.preset_id, "minimax-cn");
+        // ❹ 两样都没有 ⇒ ⇒ 没有清单（**不糊弄**）。
+        assert!(preset_doc_list(None, Some("http://127.0.0.1:8080/v1")).is_none());
+        // ❺ 老域**也认**（存量条目还指着它 ⇒ ⇒ 它仍是同一家厂商）。
+        let legacy =
+            preset_doc_list(None, Some("https://api.minimax.chat/v1")).expect("legacy host");
+        assert_eq!(legacy.preset_id, "minimax");
+    }
+
+    /// ⚠️ **主机名优先于预设 id**（2026-11-16）—— 「用户挑了 Gemini 预设、却把
+    /// 地址改成 MiniMax」⇒ ⇒ 清单必须是 **MiniMax 的** ⇒ ⇒ 不把 A 家的模型
+    /// 抄给 B 家。
+    #[test]
+    fn the_host_name_wins_over_the_preset_id() {
+        let list = preset_doc_list(Some("gemini"), Some("https://api.minimax.cn/v1"))
+            .expect("host wins");
+        assert_eq!(list.preset_id, "minimax-cn");
+        assert!(list.models.iter().any(|m| m.id == "MiniMax-H3-Image"));
+        assert!(!list.models.iter().any(|m| m.id.starts_with("gemini-")));
+    }
+
+    /// ⚠️ **上游没列的条目**（2026-11-16）—— MiniMax 的 `GET /v1/models` 逐字
+    /// 只给两条语言模型 ⇒ ⇒ 出图／视频／语音那几档**上游没列** ⇒ ⇒ 读面要拿
+    /// 它们**补齐** ⇒ ⇒ 补的**按 id 算**（上游列过的**不重复**）。
+    #[test]
+    fn the_models_the_upstream_did_not_list_are_computed_by_id() {
+        let list = preset_doc_list(Some("minimax-cn"), Some("https://api.minimax.cn/v1"))
+            .expect("minimax cn list");
+        // ❶ 上游逐字只给的两条语言模型。
+        let upstream = vec!["MiniMax-M3.1-Flash".to_string(), "MiniMax-M3".to_string()];
+        let missing = preset_models_missing(list, &upstream);
+        let ids: Vec<&str> = missing.iter().map(|m| m.id).collect();
+        assert!(ids.contains(&"MiniMax-H3-Image"), "{ids:?}");
+        assert!(ids.contains(&"speech-2.8-hd"), "{ids:?}");
+        // ❷ 上游已经列过的**不重复**。
+        assert!(!ids.contains(&"MiniMax-M3.1-Flash"), "{ids:?}");
+        assert!(!ids.contains(&"MiniMax-M3"), "{ids:?}");
+        // ❸ 上游**也列了**出图模型 ⇒ ⇒ 那条**不补**（上游说了算）。
+        let upstream2 = vec![
+            "MiniMax-M3.1-Flash".to_string(),
+            "MiniMax-H3-Image".to_string(),
+        ];
+        let missing2 = preset_models_missing(list, &upstream2);
+        assert!(!missing2.iter().any(|m| m.id == "MiniMax-H3-Image"));
+    }
+
+    /// ⚠️ **主机名怎么读**（2026-11-16）—— 只认主机名（路径、端口、大小写都不
+    /// 影响）⇒ ⇒ 少写一个 `/v1` 不会失配 ⇒ ⇒ 认错了就是「认不出 ⇒ ⇒ 不补」。
+    #[test]
+    fn the_host_name_is_read_without_the_path_or_the_port() {
+        assert_eq!(
+            base_host("https://api.minimax.cn/v1").as_deref(),
+            Some("api.minimax.cn")
+        );
+        assert_eq!(
+            base_host("api.minimax.cn/v1").as_deref(),
+            Some("api.minimax.cn")
+        );
+        assert_eq!(
+            base_host("https://api.minimax.cn:8443/v1").as_deref(),
+            Some("api.minimax.cn")
+        );
+        assert_eq!(
+            base_host("HTTPS://API.MINIMAX.CN/v1").as_deref(),
+            Some("api.minimax.cn")
+        );
+        assert!(base_host("").is_none());
     }
 }
