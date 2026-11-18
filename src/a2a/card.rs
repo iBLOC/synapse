@@ -140,7 +140,7 @@ impl AgentCard {
             vec![a2a::AgentInterface {
                 url: self.url.clone(),
                 protocol_binding: a2a::TRANSPORT_PROTOCOL_JSONRPC.to_string(),
-                protocol_version: "0.3".to_string(),
+                protocol_version: "1.0".to_string(),
                 tenant: None,
             }]
         };
@@ -178,7 +178,26 @@ impl AgentCard {
             capabilities: a2a::AgentCapabilities {
                 streaming: Some(self.capabilities.streaming),
                 push_notifications: Some(self.capabilities.push_notifications),
-                extensions: None,
+                // ⚠⚠ 不再是硬编码的 None —— 会跟客户宣告它不支持
+                // 任何扩展。⚠⚠ 卡片里的 extensions 就是「我支持哪些」的
+                // 唯一事实来源 ⇒ ⇒ 客户端拿它与请求头对账。
+                // 空列表 = 真的不支持（而不是「没协商」）。
+                extensions: if self.capabilities.extensions.is_empty() {
+                    None
+                } else {
+                    Some(
+                        self.capabilities
+                            .extensions
+                            .iter()
+                            .map(|uri| a2a::AgentExtension {
+                                uri: uri.clone(),
+                                description: None,
+                                required: None,
+                                params: None,
+                            })
+                            .collect(),
+                    )
+                },
                 extended_agent_card: None,
             },
             default_input_modes: modality_to_modes(&self.metadata.input_modalities),
@@ -244,6 +263,15 @@ impl AgentCard {
                 streaming: card.capabilities.streaming.unwrap_or(false),
                 push_notifications: card.capabilities.push_notifications.unwrap_or(false),
                 state_transition_history: false, // SDK doesn't have this field
+                // ⇒ ⇒ 反向映射：读回对端卡片里声明的扩展 URI。
+                // 不读回来就会把「对端支持 X」丢掉 ⇒ ⇒ 协商失配。
+                extensions: card
+                    .capabilities
+                    .extensions
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|e| e.uri)
+                    .collect(),
             },
             metadata: AgentMetadata {
                 input_modalities: modes_to_modality(&card.default_input_modes),
@@ -376,6 +404,14 @@ pub struct Capabilities {
     pub streaming: bool,
     pub push_notifications: bool,
     pub state_transition_history: bool,
+    /// Extension URIs this agent supports, as published in the AgentCard's
+    /// `AgentCapabilities.extensions` list.
+    ///
+    /// Empty means the agent implements no extensions. It does **not**
+    /// mean extension negotiation is skipped -- see
+    /// [`crate::a2a::extension`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extensions: Vec<String>,
 }
 
 impl Default for Capabilities {
@@ -384,6 +420,7 @@ impl Default for Capabilities {
             streaming: false,
             push_notifications: false,
             state_transition_history: false,
+            extensions: Vec::new(),
         }
     }
 }

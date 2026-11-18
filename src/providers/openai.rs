@@ -8,6 +8,12 @@ pub struct OpenAIProvider {
     api_key: String,
     base_url: String,
     default_model: String,
+    /// 额外请求头 —— 「大脑那张面」要的是 **admin token 头**
+    /// （`x-admin-token`），而 OpenAI 兼容协议只会发 `Authorization: Bearer`
+    /// ⇒ ⇒ 没有这一格，「本地推理由大脑提供」那条路根本走不通（⇒ ⇒ 401）。
+    ///
+    /// ⚠️ **不进日志、不进错误信息** —— 这里装的是凭据。
+    extra_headers: Vec<(String, String)>,
 }
 
 impl OpenAIProvider {
@@ -23,6 +29,7 @@ impl OpenAIProvider {
             api_key,
             base_url: "https://api.openai.com/v1".to_string(),
             default_model: "gpt-4o".to_string(),
+            extra_headers: Vec::new(),
         }
     }
 
@@ -54,7 +61,31 @@ impl OpenAIProvider {
             api_key: std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "no-key".into()),
             base_url: base_url.into(),
             default_model: model.into(),
+            extra_headers: Vec::new(),
         }
+    }
+
+    /// 加一个**额外请求头**（不替代 `Authorization`）。
+    ///
+    /// 为什么需要它：大脑那张面（neuron 的 OpenAI 兼容面合并在脑面根上）
+    /// 的门认的是 `x-admin-token`（主人门 / 写门）⇒ ⇒ 只发
+    /// `Authorization: Bearer` 的标准客户端**会被挡在门外**。
+    pub fn with_extra_header(
+        mut self,
+        name: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Self {
+        self.extra_headers.push((name.into(), value.into()));
+        self
+    }
+
+    /// 把额外请求头盖到请求上。
+    fn apply_extra_headers(&self, rb: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        let mut rb = rb;
+        for (name, value) in &self.extra_headers {
+            rb = rb.header(name.as_str(), value.as_str());
+        }
+        rb
     }
 }
 
@@ -115,10 +146,12 @@ impl LLMProvider for OpenAIProvider {
         };
 
         let response = self
-            .client
-            .post(format!("{}/chat/completions", self.base_url))
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
+            .apply_extra_headers(
+                self.client
+                    .post(format!("{}/chat/completions", self.base_url))
+                    .header("Authorization", format!("Bearer {}", self.api_key))
+                    .header("Content-Type", "application/json"),
+            )
             .json(&request)
             .send()
             .await
@@ -190,10 +223,12 @@ impl LLMProvider for OpenAIProvider {
         });
 
         let response = self
-            .client
-            .post(format!("{}/embeddings", self.base_url))
-            .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json")
+            .apply_extra_headers(
+                self.client
+                    .post(format!("{}/embeddings", self.base_url))
+                    .header("Authorization", format!("Bearer {}", self.api_key))
+                    .header("Content-Type", "application/json"),
+            )
             .json(&request)
             .send()
             .await

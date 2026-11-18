@@ -22,6 +22,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 pub mod onepanel;
+pub mod web;
 
 /// How much approval a specific tool invocation requires.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

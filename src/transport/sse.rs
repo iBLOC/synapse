@@ -429,7 +429,7 @@ impl super::native::ReqwestHttpClient {
     ) -> Result<RawHttpResponse, HttpError> {
         use futures::StreamExt;
 
-        let client = reqwest::Client::new();
+        let client = crate::http_client::client_for(&req.url);
         let mut builder = match req.method {
             HttpMethod::Get => client.get(&req.url),
             HttpMethod::Post => client.post(&req.url),

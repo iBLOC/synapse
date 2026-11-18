@@ -204,6 +204,14 @@ pub mod catalog;
 /// 的 `infer_capability` 互补：那条判族缀，这张表登记推断覆盖不了的族）。
 #[cfg(not(target_arch = "wasm32"))]
 pub mod model_capabilities;
+/// **glob 简化版匹配器** —— 出厂那两张表（能力档 / 输入模态）共用。
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod glob;
+/// **出厂「模型 → 输入模态」清单** —— 与能力档那张表**互补**：那张判
+/// 「这条模型是哪一类」，这张判「这条模型吃什么」（`text` / `image` /
+/// `audio` / `video` / `pdf`）。
+#[cfg(not(target_arch = "wasm32"))]
+pub mod input_modalities;
 
 pub use registry::{ProviderConfig, ProviderRegistry};
 pub use retry::{BackoffConfig, RetryMode, RetryPolicy};

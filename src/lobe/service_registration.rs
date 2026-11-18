@@ -25,7 +25,7 @@ pub async fn register_with_registry(
     card: &AgentCard,
 ) -> Result<(), String> {
     let url = format!("{}/api/agents/register", registry_url.trim_end_matches('/'));
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::builder_for(&url)
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| format!("reqwest: {e}"))?;

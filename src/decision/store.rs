@@ -238,7 +238,7 @@ pub struct HippocampusDecisionStore {
 
 impl HippocampusDecisionStore {
     pub fn new(cfg: HippocampusConfig) -> Self {
-        let http = reqwest::Client::builder()
+        let http = crate::http_client::builder_for(&cfg.base_url)
             .timeout(std::time::Duration::from_secs(15))
             .build()
             .expect("reqwest build");

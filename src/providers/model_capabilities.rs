@@ -31,10 +31,14 @@
 //!
 //! ## ⚠️ 词表边界
 //!
-//! 端脑 `Capability` 只有 9 档：`llm` / `asr` / `tts` / `vad` / `rerank` /
-//! `embedding` / `vision` / `forecast` / `image_gen`。**没有 `video_gen`**
-//! 也没有 `ocr` ⇒ ⇒ 视频生成族（`seedance` / `kling`）在本表归 `image_gen`；
-//! 识别族（`ppocr`）**不登记**（留给推断/兜底，欠一条 ocr 词）。
+//! 端脑 `Capability` **10 档**（2026-11-16 给端脑立了第 10 档）：`llm` / `asr` /
+//! `tts` / `vad` / `rerank` / `embedding` / `vision` / `forecast` /
+//! `image_gen` / **`video_gen`**。仍然**没有 `ocr`** ⇒ ⇒ 识别族（`ppocr`）
+//! **不登记**（留给推断/兜底，欠一条 ocr 词）。
+//!
+//! ⚠️ **视频族此前被折进 `image_gen`**（端脑那时只有 9 档）⇒ ⇒ 2026-11-16
+//! 端脑立了第 10 档 ⇒ ⇒ 本表把视频族**改回** `video_gen` ⇒ ⇒ 视频模型
+//! **不再**混进出图桶（端脑读面 `normalize_word` 同步改）。
 //!
 //! ## 匹配语义（⚠️ 为什么是「包含」而不是「前缀」）
 //!
@@ -53,6 +57,8 @@
 //! 排序在运行时做（`sorted_rules`），声明顺序可以随时插；测试钉的是
 //! **语义**（具体者先命中）与**词表合法**，不钉声明顺序。
 
+use super::glob::matches;
+
 /// 一条「模型 id 模式 → 能力词」规则。
 #[derive(Clone, Copy)]
 pub struct ModelCapabilityRule {
@@ -60,12 +66,27 @@ pub struct ModelCapabilityRule {
     pub pattern: &'static str,
     /// 端脑词表里的能力词（`Capability::ALL` 同一族拼法）。
     pub capability: &'static str,
+    /// ⚠️ **精确 id**（2026-11-16）—— `pattern` **逐字**等于模型 id 时才算命中
+    /// ⇒ ⇒ 用来把「同族不同物」分开：`MiniMax-H3`（**视频**）与
+    /// `MiniMax-H3-Image`（**出图**）只差一个后缀 ⇒ ⇒ contains 口径分不开
+    /// ⇒ ⇒ 精确规则**优先于** contains 规则（见 `sorted_rules`）。
+    pub exact: bool,
 }
 
 const fn rule(pattern: &'static str, capability: &'static str) -> ModelCapabilityRule {
     ModelCapabilityRule {
         pattern,
         capability,
+        exact: false,
+    }
+}
+
+/// **精确 id 规则** —— `pattern` 逐字等于模型 id 才命中。
+const fn exact_rule(pattern: &'static str, capability: &'static str) -> ModelCapabilityRule {
+    ModelCapabilityRule {
+        pattern,
+        capability,
+        exact: true,
     }
 }
 
@@ -77,19 +98,26 @@ pub static RULES: &[ModelCapabilityRule] = &[
     rule("*h3-image*", "image_gen"),
     rule("*seedream*", "image_gen"),
     rule("*cogview*", "image_gen"),
-    rule("*seedance*", "image_gen"), // 端脑词表无 video 档 ⇒ 归 image_gen
+    rule("*seedance*", "video_gen"), // 视频族（2026-11-16 起端脑有第 10 档 video_gen）
     rule("*imagen*", "image_gen"),
     rule("*dall-e*", "image_gen"),
     rule("*kolors*", "image_gen"),
-    rule("*kling*", "image_gen"),
-    // ⚠️ **MiniMax 视频族**（`MiniMax-Hailuo-*`）—— 端脑词表无 video 档
-    // ⇒ ⇒ 与 seedance/kling 同归 image_gen。
+    rule("*kling*", "video_gen"),
+    // ⚠️ **MiniMax 视频族**（`MiniMax-Hailuo-*`）—— 端脑有 video 档（2026-11-16）
+    // ⇒ ⇒ 与 seedance/kling 同归 video_gen（2026-11-16 起端脑有第 10 档）。
     //
     // ⚠️ **模式必须比 `*minimax*`（9 字）长** —— 规则按**长度降序**求值
     // ⇒ ⇒ `*hailuo*`（8 字）会被 `*minimax*` 先吃掉 ⇒ ⇒ 落 llm ✗
     // ⇒ ⇒ 这里用两段式（`minimax-hailuo` / `minimax/hailuo`）。
-    rule("*minimax-hailuo*", "image_gen"),
-    rule("*minimax/hailuo*", "image_gen"),
+    rule("*minimax-hailuo*", "video_gen"),
+    rule("*minimax/hailuo*", "video_gen"),
+    // 裸 `MiniMax-H3` 是**视频**模型（2026-11-16）—— 它与出图模型
+    // `MiniMax-H3-Image` **只差一个后缀** ⇒ ⇒ contains 口径
+    // （`*minimax-h3*`）分不开 ⇒ ⇒ 这里用**精确 id**规则（优先于 contains）
+    // ⇒ ⇒ `minimax-h3` 落 `video_gen`、`minimax-h3-image` 仍落
+    // `image_gen`。
+    exact_rule("minimax-h3", "video_gen"),
+    exact_rule("minimax/h3", "video_gen"),
     rule("*flux*", "image_gen"),
     // ── 语音（推断覆盖不到的一族）────────────────────────────────────
     // ⚠️ **对话族前缀不许吃掉语音 id**（2026-11-15 真机读数）：`*qwen*`
@@ -176,45 +204,21 @@ fn sorted_rules() -> &'static [ModelCapabilityRule] {
     static SORTED: OnceLock<Vec<ModelCapabilityRule>> = OnceLock::new();
     SORTED.get_or_init(|| {
         let mut v = RULES.to_vec();
-        // 长度降序；同长度按字母序（确定性）。
+        // ⚠️ **精确 id 优先**（2026-11-16）⇒ ⇒ 再长度降序；同长度按字母序
+        // （确定性）。⇒ ⇒ 精确规则永远先于 contains 规则 ⇒ ⇒
+        // `minimax-h3`（视频）不会被 `*minimax-h3*`（出图）吃掉。
         v.sort_by(|a, b| {
-            b.pattern
-                .len()
-                .cmp(&a.pattern.len())
+            b.exact
+                .cmp(&a.exact)
+                .then_with(|| b.pattern.len().cmp(&a.pattern.len()))
                 .then_with(|| a.pattern.cmp(b.pattern))
         });
         v
     })
 }
 
-/// glob 简化版：`*` 匹配任意串（顺序段匹配；首段也允许出现在任意位置
-/// —— 这是「包含」语义，见文件头）。
-fn matches(pattern: &str, id: &str) -> bool {
-    if !pattern.contains('*') {
-        return pattern == id;
-    }
-    let parts: Vec<&str> = pattern.split('*').collect();
-    let mut cursor = 0usize;
-    let leading_wildcard = pattern.starts_with('*');
-    for (i, part) in parts.iter().enumerate() {
-        if part.is_empty() {
-            continue;
-        }
-        if i == 0 && !leading_wildcard {
-            // 无前导 `*` ⇒ 首段必须**前缀**命中（`o1*` 不许命中 `proto1`）。
-            if !id[cursor..].starts_with(part) {
-                return false;
-            }
-            cursor += part.len();
-            continue;
-        }
-        match id[cursor..].find(part) {
-            Some(pos) => cursor += pos + part.len(),
-            None => return false,
-        }
-    }
-    pattern.ends_with('*') || cursor == id.len()
-}
+/// ⚠️ 匹配器搬到 `glob` 模块了（**两张出厂表共用**）—— 见
+/// `providers/glob.rs`。
 
 /// 查出厂清单（大小写不敏感）。
 ///
@@ -227,7 +231,15 @@ pub fn catalog_capability(model_id: &str) -> Option<&'static str> {
     }
     sorted_rules()
         .iter()
-        .find(|r| matches(r.pattern, &id))
+        .find(|r| {
+            // ⚠️ **精确 id 规则** ⇒ 逐字相等才算命中（`glob::matches` 对
+            // 无通配符的模式本来就是精确匹配 ⇒ ⇒ 这里显式分一句更清楚）。
+            if r.exact {
+                r.pattern == id
+            } else {
+                matches(r.pattern, &id)
+            }
+        })
         .map(|r| r.capability)
 }
 
@@ -239,8 +251,8 @@ pub fn catalog_capability(model_id: &str) -> Option<&'static str> {
 /// ⇒ ⇒ 两张表再也不会各说各话（2026-11-15 之前它们对 `asr-1.0` 就各说
 /// 各话：清单层落空、推断层说 asr）。
 ///
-/// ⚠️ 兜底 `llm` 与**词表归一**（`video_gen` → `image_gen`）**留在端脑**
-/// ⇒ ⇒ 那是端脑词表的事，不是「认出这条是什么模型」的事。
+/// ⚠️ 兜底 `llm` **留在端脑**（2026-11-16：词表归一 `video_gen` → `image_gen` 这一格**已撤** —— 端脑立了第 10 档 `video_gen` ⇒ ⇒ 视频族原样上去，不再被折成出图）
+/// ⇒ ⇒ 那是端脑那条链的事，不是「认出这条是什么模型」的事。
 pub fn effective_capability(model_id: &str) -> Option<&'static str> {
     catalog_capability(model_id).or_else(|| crate::providers::catalog::infer_capability(model_id))
 }
@@ -305,14 +317,18 @@ mod tests {
         assert_eq!(catalog_capability("MiniMax-M3"), Some("llm"));
     }
 
-    /// ⚠️ **MiniMax 视频族**（端脑词表无 video 档 ⇒ 同 seedance/kling 归
-    /// image_gen；读面再归一）。
+    /// ⚠️ **MiniMax 视频族现在有自己的档了**（2026-11-16）—— 端脑词表加了
+    /// 第 10 档 `video_gen` ⇒ ⇒ 视频族**不再折进** `image_gen`。
+    ///
+    /// ⚠️ 为什么要拆：视频端点是**任务式三步**（创建 → 轮询 → 取文件），
+    /// 与出图的「一次 POST 拿一张图」完全不是一回事 ⇒ ⇒ 混在一档里，
+    /// 界面分不出来，存进去也跑不起来。
     #[test]
-    fn minimax_video_family_lands_on_image_gen() {
-        assert_eq!(catalog_capability("MiniMax-Hailuo-2.3"), Some("image_gen"));
-        assert_eq!(catalog_capability("MiniMax-Hailuo-02"), Some("image_gen"));
+    fn minimax_video_family_lands_on_video_gen() {
+        assert_eq!(catalog_capability("MiniMax-Hailuo-2.3"), Some("video_gen"));
+        assert_eq!(catalog_capability("MiniMax-Hailuo-02"), Some("video_gen"));
         // 命名空间形态。
-        assert_eq!(catalog_capability("MiniMax/Hailuo-2.3"), Some("image_gen"));
+        assert_eq!(catalog_capability("MiniMax/Hailuo-2.3"), Some("video_gen"));
         // 负控：H3-Image 仍是出图。
         assert_eq!(catalog_capability("MiniMax-H3-Image"), Some("image_gen"));
     }
@@ -335,8 +351,8 @@ mod tests {
             ("MiniMax/asr-1.0", "asr"),
             ("image-01", "image_gen"),
             ("MiniMax-H3-Image", "image_gen"),
-            ("MiniMax-H3", "image_gen"),
-            ("MiniMax-Hailuo-2.3", "image_gen"),
+            ("MiniMax-H3", "video_gen"),
+            ("MiniMax-Hailuo-2.3", "video_gen"),
             // 兄弟供应商的同类 id（不许被 minimax 的规则误吃）。
             ("qwen3-tts-flash", "tts"),
             ("qwen3-asr-flash-realtime", "asr"),
@@ -429,7 +445,7 @@ mod tests {
 
     #[test]
     fn every_word_is_in_the_brain_vocabulary() {
-        // ⚠️ 9 档词表（端脑 `Capability`）。写错一个词 ⇒ 端脑校验会拒，
+        // ⚠️ 10 档词表（端脑 `Capability`，2026-11-16 加了 `video_gen`）。写错一个词 ⇒ 端脑校验会拒，
         // 而清单是静态的 ⇒ 只在运行期才炸 ⇒ 这里先钉住。
         const VOCAB: &[&str] = &[
             "llm",
@@ -441,6 +457,7 @@ mod tests {
             "vision",
             "forecast",
             "image_gen",
+            "video_gen",
         ];
         for r in RULES {
             assert!(
@@ -450,5 +467,33 @@ mod tests {
                 r.pattern
             );
         }
+    }
+
+    /// ⚠️ **视频族独立成档**（2026-11-16）—— 端脑立了第 10 档 `video_gen`
+    /// ⇒ ⇒ 视频模型**不再**混进出图桶。
+    #[test]
+    fn the_video_family_lands_on_video_gen_not_image_gen() {
+        assert_eq!(catalog_capability("MiniMax-Hailuo-2.3"), Some("video_gen"));
+        assert_eq!(catalog_capability("MiniMax-Hailuo-02"), Some("video_gen"));
+        assert_eq!(catalog_capability("seedance-1.0-pro"), Some("video_gen"));
+        assert_eq!(catalog_capability("kling-v1"), Some("video_gen"));
+    }
+
+    /// ⚠️ **裸 `MiniMax-H3` 是视频、`MiniMax-H3-Image` 是出图** —— 两者
+    /// 只差一个后缀 ⇒ ⇒ contains 口径分不开 ⇒ ⇒ 必须靠**精确 id**规则。
+    #[test]
+    fn the_bare_h3_is_video_and_the_image_sibling_stays_image() {
+        assert_eq!(catalog_capability("MiniMax-H3"), Some("video_gen"));
+        assert_eq!(catalog_capability("MiniMax/H3"), Some("video_gen"));
+        // 负控：出图那三兄弟不许被视频规则吃掉。
+        assert_eq!(catalog_capability("MiniMax-H3-Image"), Some("image_gen"));
+        assert_eq!(
+            catalog_capability("MiniMax-H3-Image-Highspeed"),
+            Some("image_gen")
+        );
+        assert_eq!(
+            catalog_capability("MiniMax-H3-Image-Context-IR"),
+            Some("image_gen")
+        );
     }
 }

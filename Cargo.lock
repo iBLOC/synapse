@@ -4,9 +4,9 @@ version = 4
 
 [[package]]
 name = "a2a-client-lf"
-version = "0.2.0"
+version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d47c1b2cb1263716aff5aacb8b9e01e09491a5866a6c3f9035febfeb65bf395"
+checksum = "bd39a97ef9acc3fe4fa34169992117237046104ae479d0898d248ef70fcaa4fc"
 dependencies = [
  "a2a-lf",
  "a2a-pb",
@@ -28,11 +28,11 @@ dependencies = [
 
 [[package]]
 name = "a2a-lf"
-version = "0.3.0"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fb24275cca126dc3301d272eef07bd4cefd87f9a7dd5d6f27200fe87e8a83d0"
+checksum = "c9bdc39f79399c01ec4df5da3b653e31b3bac52214ca3d8331d6f059c273b5b8"
 dependencies = [
- "base64 0.22.1",
+ "base64 0.23.1",
  "chrono",
  "serde",
  "serde_json",
@@ -42,9 +42,9 @@ dependencies = [
 
 [[package]]
 name = "a2a-pb"
-version = "0.1.8"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e44fccf50ee3f44badfb7861e9b9d1e7af7f276b970762b25eb5911b9f03c0b"
+checksum = "24091234b0c532f1ae1f5bba21e8840d542b6636b469fedcbad3a1167aae051e"
 dependencies = [
  "a2a-lf",
  "chrono",
@@ -63,9 +63,9 @@ dependencies = [
 
 [[package]]
 name = "a2a-server-lf"
-version = "0.4.0"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28ba13800cb839d449b54ffd866b5474d785e409a8bda4e71016b17534998d6c"
+checksum = "5d98a2aa231797557d88f858a6a4975235dbf7fc5e1b6b8b6b644da47de99bcf"
 dependencies = [
  "a2a-lf",
  "a2a-pb",
@@ -82,7 +82,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tower",
- "tower-http",
+ "tower-http 0.7.1",
  "tracing",
  "uuid",
 ]
@@ -3200,7 +3200,7 @@ dependencies = [
  "tokio-rustls",
  "tokio-util",
  "tower",
- "tower-http",
+ "tower-http 0.6.8",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -4246,6 +4246,21 @@ dependencies = [
  "iri-string",
  "pin-project-lite",
  "tower",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08a05a66a4fdd61cbbe0a1d755ffe0ca6aba159dd4820936a0ff8a8278245b9c"
+dependencies = [
+ "bitflags 2.11.0",
+ "bytes",
+ "http",
+ "percent-encoding",
+ "pin-project-lite",
  "tower-layer",
  "tower-service",
 ]

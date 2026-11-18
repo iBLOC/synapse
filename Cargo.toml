@@ -77,14 +77,14 @@ hex = "0.4"
 md5 = "0.7"
 
 # A2A protocol (official SDK)
-a2a-lf = "0.3"
-a2a-server-lf = "0.4"
+a2a-lf = "0.4.2"
+a2a-server-lf = "0.5.3"
 
 # Prometheus metrics (for lobe observability, opt-in via feature flag)
 metrics = { version = "0.24", optional = true }
 metrics-exporter-prometheus = { version = "0.16", optional = true }
 axum = { version = "0.8", features = ["ws", "multipart"] }
-a2a-client-lf = "0.2"
+a2a-client-lf = "0.2.9"
 
 # Async stream utilities
 async-stream = "0.3"

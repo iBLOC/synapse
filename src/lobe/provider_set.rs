@@ -28,7 +28,7 @@ pub struct OpenAILlm {
 
 impl OpenAILlm {
     pub fn new(base_url: String, model: String) -> Self {
-        let http = reqwest::Client::builder()
+        let http = crate::http_client::builder_for(&base_url)
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("reqwest build");

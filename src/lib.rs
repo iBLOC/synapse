@@ -32,6 +32,7 @@ pub mod components;
 pub mod compose;
 pub mod events;
 pub mod hippo_target;
+pub mod http_client;
 pub mod notifications;
 pub mod llm;
 pub mod lobe;

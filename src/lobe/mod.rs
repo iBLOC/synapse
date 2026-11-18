@@ -34,7 +34,7 @@ pub use history::HistorySummarizer;
 pub use env_config::LobeEnv;
 pub use provider_set::ProviderSet;
 pub use service_registration::register_with_registry;
-pub use a2a_server::build_a2a_router;
+pub use a2a_server::{build_a2a_router, parse_send_request, SendError, SendRequest};
 pub use lobe_app::LobeApp;
 pub use provider_traits::{EmotionProvider, EmotionInput, EmotionOutput};
 pub use config_manager::{ConfigManager, GracefulReload, LobeConfig};

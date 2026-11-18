@@ -18,6 +18,7 @@
 //! downstream callers built against v0.1 continue to compile unchanged.
 
 pub mod card;
+pub mod extension;
 pub mod protocol;
 
 /// Structured tool-event channel for the A2A wire — see the module docs

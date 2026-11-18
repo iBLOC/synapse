@@ -87,6 +87,30 @@ impl TaskStore for FileTaskStore {
         Ok(entry.version)
     }
 
+    /// Atomically check that a task is not terminal and transition it to
+    /// `CANCELED`.
+    ///
+    /// ⚠️ **必须持写锁跨过「检查 + 转移」两步** —— 这个方法存在的全部理由
+    /// 就是堵住 check-then-act 竞态：两个并发取消请求若都先读到「未终态」，
+    /// 再各自写一次取消，就会双双「成功」⇒ ⇒ 取消语义失效。
+    /// ⇒ ⇒ 与 `InMemoryTaskStore` 的形状保持一致（读锁升级成写锁）。
+    async fn begin_cancel(&self, task_id: &str) -> Result<Task, A2AError> {
+        let mut store = self.index.write().await;
+        let entry = store
+            .get_mut(task_id)
+            .ok_or_else(|| A2AError::task_not_found(task_id))?;
+        if entry.task.status.state.is_terminal() {
+            return Err(A2AError::task_not_cancelable(task_id));
+        }
+        entry.version += 1;
+        entry.task.status.state = a2a::TaskState::Canceled;
+        entry.task.status.timestamp = Some(chrono::Utc::now());
+        // ⚠️ 状态转移必须落盘 —— 否则重启后任务又变回「未终态」⇒ ⇒
+        // ⇒ 取消可以无限重复 ⇒ ⇒ 「取消了但看起来没取消」。
+        self.persist(entry).await?;
+        Ok(entry.task.clone())
+    }
+
     async fn get(&self, task_id: &str) -> Result<Option<Task>, A2AError> {
         let store = self.index.read().await;
         Ok(store.get(task_id).map(|e| e.task.clone()))

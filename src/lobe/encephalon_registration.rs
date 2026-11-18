@@ -113,7 +113,7 @@ pub async fn register_with_encephalon_public(
 }
 
 async fn post_json(url: &str, body: &Value) -> Result<(), RegisterFailure> {
-    let client = reqwest::Client::builder()
+    let client = crate::http_client::builder_for(url)
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| RegisterFailure::Other(format!("reqwest: {e}")))?;

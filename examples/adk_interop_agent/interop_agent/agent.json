@@ -1,0 +1,25 @@
+{
+  "name": "interop_agent",
+  "description": "ADK agent used to test A2A interop with Synapse.",
+  "version": "1.0.0",
+  "url": "http://127.0.0.1:8001/a2a/interop_agent",
+  "capabilities": {
+    "streaming": true
+  },
+  "defaultInputModes": [
+    "text/plain"
+  ],
+  "defaultOutputModes": [
+    "text/plain"
+  ],
+  "skills": [
+    {
+      "id": "reply",
+      "name": "Reply",
+      "description": "Answer with the model.",
+      "tags": [
+        "test"
+      ]
+    }
+  ]
+}

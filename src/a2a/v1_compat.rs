@@ -52,10 +52,9 @@ pub struct A2AClient {
 impl A2AClient {
     #[allow(deprecated)]
     pub fn new(agent_url: impl Into<String>) -> Self {
-        Self {
-            client: reqwest::Client::new(),
-            agent_url: agent_url.into(),
-        }
+        let agent_url = agent_url.into();
+        let client = crate::http_client::client_for(&agent_url);
+        Self { client, agent_url }
     }
 
     #[allow(deprecated)]
