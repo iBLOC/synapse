@@ -2,7 +2,10 @@
 name = "synapse"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.94"
+# ⚠️ 2026-11-20（依赖大版本刀）：1.94 → 1.97 —— wasmtime 50（MSRV 1.97）
+# 顶穿了旧地板；本机/CI 默认工具链 1.99 满足 ⇒ 消费方（telencephalon/
+# desktop/encephalon）的构建工具链须 ≥ 1.97。
+rust-version = "1.97"
 description = "Rust-based intelligent agent development framework"
 license = "Apache-2.0"
 authors = ["Synapse Contributors"]
@@ -61,7 +64,11 @@ notify = "7"
 serde_yaml = "0.9"
 
 # WASM runtime (always available — agents run in WASM by default)
-wasmtime = "20"
+# ⚠️ 2026-11-20（依赖大版本刀）：20 → 50（最新 50.0.3）。宿主面只用核型 API
+# （Config.consume_fuel/max_wasm_stack、Engine、Store.set_fuel/get_fuel、
+# Linker.func_wrap、get_typed_func）⇒ 跨 30 个大版本由编译器核对；wasm MCP
+# 那两条硬规矩不变（打包抬 --global-base；宿主函数绝不 block_on）。
+wasmtime = "50"
 wat = "1"
 
 # Hashing for package integrity
